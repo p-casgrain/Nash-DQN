@@ -295,7 +295,7 @@ if __name__ == '__main__':
     sum_loss = np.zeros(num_sim)
     
     for k in range (0,num_sim):
-        epsilon = epsilon - epsilon*(k/(num_sim-1))
+        epsilon = ep - ep*(k/(num_sim-1))
         total_l = 0
         for i in range(0,T):   
             
@@ -313,7 +313,7 @@ if __name__ == '__main__':
             #take chosen action and update new state
             sim.step(a)
             [state,lr,tr] = sim.get_state()
-            state_dict = {'time_step':i,
+            state_dict = {'time_step':0,
                           'current_inventory':state[0],
                           'current_price':state[1]}
             new_state = State(state_dict)
