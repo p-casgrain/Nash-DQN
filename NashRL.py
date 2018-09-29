@@ -27,6 +27,7 @@ Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward'))
 
 # Define object for estimated elements via NN
+# ***NOTE*** All elements are tensors
 class FittedValues(object):
     # Initialized via a single numpy vector
     def __init__(self,value_vector):
@@ -37,7 +38,7 @@ class FittedValues(object):
         self.mu = value_vector[0:self.num_players] #mean of each player
         value_vector = value_vector[self.num_players:]
         
-        self.P1 = np.exp(value_vector[0:self.num_players]) #P1 matrix for each player, exp transformation to ensure positive value
+        self.P1 = torch.exp(value_vector[0:self.num_players]) #P1 matrix for each player, exp transformation to ensure positive value
         value_vector = value_vector[self.num_players:]
         
         self.a = value_vector[0:self.num_players] #a of each player
@@ -45,12 +46,12 @@ class FittedValues(object):
         
         #A matrix where each row is the vector P_i2
         #Note that currently there is no symmetry assumption and each P_i2 is estimated separately
-        self.P2matrix = (value_vector[0:self.num_players*(self.num_players-1)]).reshape((self.num_players,self.num_players-1)) 
+        self.P2matrix = (value_vector[0:self.num_players*(self.num_players-1)]).view((self.num_players,self.num_players-1)) 
         value_vector = value_vector[self.num_players*(self.num_players-1):]
         
         #A matrix where each row is the vector mu_i{-1}
         #Note that currently there is no symmetry assumption and each mu_i{-1} is estimated separately
-        self.muNeg1 = (value_vector[0:self.num_players*(self.num_players-1)]).reshape((self.num_players,self.num_players-1)) 
+        self.muNeg1 = (value_vector[0:self.num_players*(self.num_players-1)]).view((self.num_players,self.num_players-1)) 
         
 # Define an object that summarizes all state variables
 class State(object):
@@ -72,8 +73,8 @@ class DQN(nn.Module):
         self.main = nn.Sequential(
             nn.Linear(input_dim, 20),
             nn.ReLU(),
-            nn.Linear(20, 20),
-            nn.ReLU(),
+            #nn.Linear(20, 20),
+            #nn.ReLU(),
             nn.Linear(20, output_dim)
         )
         
@@ -99,8 +100,10 @@ class NashNN():
         
     # Transforms output tensor into FittedValues Object
     def tensorTransform(self, output):
-        return FittedValues(output.data.numpy()[0])
+        return FittedValues(output[0])
     
+    
+    #ignore these functions for now... was trying to do batch predictions 
     def predict_batch(self, input):
         return self.tensorsTransform(self.main_net(self.statesTransform(input),batch_size = 3))
         
@@ -138,7 +141,7 @@ class NashNN():
 class ExperienceReplay:
     #each experience is a list of with each tuple having:
     #first element: state,
-    #second element: array of actions of each agent
+    #second element: array of actions of each agent,
     #third element: array of rewards received for each agent
     def __init__(self, buffer_size):
         self.buffer = []
@@ -206,7 +209,7 @@ class MarketSimulator(object):
         self.total_reward = np.zeros(self.N, dtype=np.float32)
 
         self.dW = np.random.normal(0, np.sqrt(self.dt),
-                                      np.ceil(self.T / self.dt) + 2 )
+                                      int(round(np.ceil(self.T / self.dt) + 2 )))
 
         self.done = False
 
@@ -224,10 +227,6 @@ class MarketSimulator(object):
             self.total_reward += self.last_reward
 
             # Advance Asset Price
-#            print("mu=",self.mu(self.t,self.S))
-#            print("dt=",self.dt)
-#            print("sigma=",self.sigma)
-#            print("dW=",self.dW)
             self.dF = self.mu(self.t,self.S) * self.dt + self.sigma * self.dW[int(round(self.t))]
             self.dS = self.dF + self.dt * ( self.p_imp * np.mean(nu) )
             self.S += self.dS
@@ -258,8 +257,6 @@ if __name__ == '__main__':
     
     #network object
     net = NashNN(2+num_players,parameter_number)
-    #optimizer = optim.RMSprop(net.main_net.parameters(),lr=0.001)
-    #criterion = nn.MSELoss()
     
     #simulation object
     sim_dict = {'price_impact': 0.05,
@@ -280,14 +277,14 @@ if __name__ == '__main__':
     rewards = np.zeros((T,num_players))
     
     [state,lr,tr] = sim.get_state()
-    state_dict = {'time_step':i,
+    state_dict = {'time_step':0,
                   'current_inventory':state[0],
                   'current_price':state[1]}
     current_state = State(state_dict)    
     states = [current_state]
     
     #exploration chance
-    epsilon = 0.5
+    ep = 0.5
     
     #intialize relay memory
     replay = ExperienceReplay(200)
@@ -298,7 +295,7 @@ if __name__ == '__main__':
         epsilon = ep - ep*(k/(num_sim-1))
         total_l = 0
         for i in range(0,T):   
-            
+            #print(net.predict(current_state).mu)
             #takes action
             if i == T-1:
                 a = -current_state.q
@@ -308,12 +305,12 @@ if __name__ == '__main__':
                     a = np.random.rand(num_players)*10-5
                 else:
                     #else take predicted nash action
-                    a = net.predict(current_state).mu
+                    a = net.predict(current_state).mu.data.numpy()
                     
             #take chosen action and update new state
             sim.step(a)
             [state,lr,tr] = sim.get_state()
-            state_dict = {'time_step':0,
+            state_dict = {'time_step':i,
                           'current_inventory':state[0],
                           'current_price':state[1]}
             new_state = State(state_dict)
@@ -334,30 +331,62 @@ if __name__ == '__main__':
             
             replay_sample = replay.sample(min(i+1,batch_update_size))
             
+            #samples from priority and calculate total loss
             estimated_q = []
             actual_q = []
             for sample in (replay_sample):
+                #obtain estimated current state nash value
                 output = net.predict(sample[0])
+                #obtain estimated next state nash value
                 next_NN_value = net.predict(sample[2])
+                
+                #cycle through all agents
                 for agent_num in range(0,num_players):
-                    actual_q.append(sample[3][agent_num]+next_NN_value.V[agent_num])
-                    #print(output.V[agent_num]-0.5*(sample[1][agent_num]-output.mu[agent_num])*output.P1[agent_num]*(sample[1][agent_num]-output.mu[agent_num]))
-                    #print((sample[1][agent_num]-output.a[agent_num])*output.P2matrix[agent_num].dot(np.delete(sample[1],agent_num)-output.muNeg1[agent_num]))
-                    estimated_q.append(output.V[agent_num]-0.5*(sample[1][agent_num]-output.mu[agent_num])*output.P1[agent_num]*(sample[1][agent_num]-output.mu[agent_num])+
-                                       (sample[1][agent_num]-output.a[agent_num])*output.P2matrix[agent_num].dot(np.delete(sample[1],agent_num)-output.muNeg1[agent_num]))
+                    
+                    #convert experience replay action/reward to auto_grad variables
+                    sample_a = Variable(torch.from_numpy(sample[1]).float())
+                    sample_lr= Variable(torch.from_numpy(sample[3]).float())
+                    
+                    #define the vector mu_{-1}
+                    if agent_num == 0:
+                        other_agenta = sample_a[1:]
+                    elif agent_num == num_players-1:
+                        other_agenta = sample_a[0:-1]
+                    else:
+                        other_agenta = torch.cat((sample_a[0:agent_num],sample_a[agent_num+1:]))
+                    
+                    #calculate actual value of state-action pair for agent (based on experienced reward + next state estimated nash)
+                    actual_q.append(next_NN_value.V[agent_num] + sample_lr[agent_num])
+                    
+                    #calculate estimated value of state-action pair for agent(based on network output using advantage function)
+                    estimated_q.append(output.V[agent_num]-0.5*(sample_a[agent_num]-output.mu[agent_num])*output.P1[agent_num]*(sample_a[agent_num]-output.mu[agent_num])+
+                                       (sample_a[agent_num]-output.a[agent_num])*output.P2matrix[agent_num].dot(other_agenta-output.muNeg1[agent_num]))
             
-            loss = net.criterion(Variable(torch.FloatTensor(np.array(estimated_q)),requires_grad=True), Variable(torch.FloatTensor(np.array(actual_q))))
+            #convert list of tensors into tensor and set actual_q to non-autograd variable (since its fixed value)
+            estimated_q = torch.stack(estimated_q)
+            actual_q = torch.stack(actual_q)
+            actual_q = actual_q.detach()
+            
+            #define loss function, calc gradients and update
+            loss = net.criterion(estimated_q, actual_q)
             net.optimizer.zero_grad()
             loss.backward()
             net.optimizer.step()
             
+            #totals loss (of experience replay) per time step
             total_l += sum(map(lambda a,b:(a-b)*(a-b),estimated_q,actual_q))
-        #print(replay.buffer)
+
+        #defines loss per period
         sum_loss[k] = total_l
+        #for param in net.main_net.parameters():
+        #    print(param.data) 
         #print(prices)
         #print(Qs)
         #print(Actions)
+        
+        #resets simulation
         sim.reset()
+        
     plt.plot(sum_loss)
         
     
