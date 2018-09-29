@@ -11,6 +11,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.autograd import Variable
 import torch.nn.functional as F
+import matplotlib.pyplot as plt
 #import torchvision.transforms as T
 
 # -------------------------------------------------------------------
@@ -99,6 +100,18 @@ class NashNN():
     # Transforms output tensor into FittedValues Object
     def tensorTransform(self, output):
         return FittedValues(output.data.numpy()[0])
+    
+    def predict_batch(self, input):
+        return self.tensorsTransform(self.main_net(self.statesTransform(input),batch_size = 3))
+        
+    # Transforms state object into tensor
+    def statesTransform(self, s):
+        print(np.array([st.getNormalizedState() for st in s]))
+        return Variable(torch.from_numpy(np.array([st.getNormalizedState() for st in s])).float()).view(1, -1)
+        
+    # Transforms output tensor into FittedValues Object
+    def tensorsTransform(self, output):
+        return np.apply_along_axis(FittedValues(),1,output.data.numpy())
 
 # Define Replay Buffer Class using Transition Object
 #class ReplayMemory(object):
@@ -123,6 +136,10 @@ class NashNN():
 
 
 class ExperienceReplay:
+    #each experience is a list of with each tuple having:
+    #first element: state,
+    #second element: array of actions of each agent
+    #third element: array of rewards received for each agent
     def __init__(self, buffer_size):
         self.buffer = []
         self.buffer_size = buffer_size
@@ -162,7 +179,7 @@ class MarketSimulator(object):
 
         # Allocating Memory for Game Variables
         self.Q = np.zeros( self.N, dtype=np.float32 )
-        self.S = np.float32(0)
+        self.S = np.float32(10+np.random.normal(0,self.sigma))
         self.dS = np.float32(0)
         self.dF = np.float32(0)
         # self.F = np.float32(0)
@@ -179,10 +196,10 @@ class MarketSimulator(object):
         # Variable Indicating Whether Done
         self.done = False
 
-    def reset(self,S0,Q0):
+    def reset(self):
         # Reset Game Values
-        self.Q = np.float32(Q0)
-        self.S = np.float32(S0)
+        self.Q = np.zeros( self.N, dtype=np.float32 )
+        self.S = np.float32(10+np.random.normal(0,self.sigma))
         self.t = np.float32(0)
 
         self.last_reward = np.zeros( self.N, dtype=np.float32 )
@@ -232,12 +249,17 @@ class MarketSimulator(object):
 if __name__ == '__main__':
     num_players = 4
     T = 5
+    replay_stepnum = 3
+    batch_update_size = 100
+    num_sim = 1000
     
     #number of parameters that need to be estimated by the network
     parameter_number = 4*num_players + 2*num_players*(num_players-1)
     
     #network object
     net = NashNN(2+num_players,parameter_number)
+    #optimizer = optim.RMSprop(net.main_net.parameters(),lr=0.001)
+    #criterion = nn.MSELoss()
     
     #simulation object
     sim_dict = {'price_impact': 0.05,
@@ -255,46 +277,87 @@ if __name__ == '__main__':
     prices = np.zeros(T)
     Qs = np.zeros((T,num_players))
     Actions = np.zeros((T,num_players))
+    rewards = np.zeros((T,num_players))
+    
+    [state,lr,tr] = sim.get_state()
+    state_dict = {'time_step':i,
+                  'current_inventory':state[0],
+                  'current_price':state[1]}
+    current_state = State(state_dict)    
+    states = [current_state]
     
     #exploration chance
     epsilon = 0.5
     
-    for i in range(0,T):
-        #assigns current state object
-        [state,lr,tr] = sim.get_state()
-        state_dict = {'time_step':i,
-                      'current_inventory':state[0],
-                      'current_price':state[1]}
-        current_state = State(state_dict)        
-        
-        #epsilon = epsilon - epsilon*(i/(Nsims-1))
-        
-        #takes action
-        if i == T-1:
-            a = -current_state.q
-        else:
-            if np.random.random() < epsilon:
-                #random action between buying/selling 5 shares for all players
-                a = np.random.rand(num_players)*10-5
-            else:
-                #else take predicted nash action
-                a = net.predict(current_state).mu
-                
-        #take chosen action and update new state
-        sim.step(a)
-        [state,lr,tr] = sim.get_state()
-        state_dict = {'time_step':i,
-                      'current_inventory':state[0],
-                      'current_price':state[1]}
-        new_state = State(state_dict)
-        
-        prices[i] = new_state.p
-        Qs[i,:] = new_state.q
-        Actions[i,:] = a
-#        print(sim.get_state())
-#        sim.step(np.array([1,-5,3,-15]))
+    #intialize relay memory
+    replay = ExperienceReplay(200)
     
-    print(prices)
-    print(Qs)
-    print(Actions)
+    sum_loss = np.zeros(num_sim)
+    
+    for k in range (0,num_sim):
+        epsilon = epsilon - epsilon*(k/(num_sim-1))
+        total_l = 0
+        for i in range(0,T):   
+            
+            #takes action
+            if i == T-1:
+                a = -current_state.q
+            else:
+                if np.random.random() < epsilon:
+                    #random action between buying/selling 5 shares for all players
+                    a = np.random.rand(num_players)*10-5
+                else:
+                    #else take predicted nash action
+                    a = net.predict(current_state).mu
+                    
+            #take chosen action and update new state
+            sim.step(a)
+            [state,lr,tr] = sim.get_state()
+            state_dict = {'time_step':i,
+                          'current_inventory':state[0],
+                          'current_price':state[1]}
+            new_state = State(state_dict)
+            
+            #updates storage variables
+            states.append(new_state)
+            prices[i] = new_state.p
+            Qs[i,:] = new_state.q
+            Actions[i,:] = a
+            rewards[i] = lr
+            
+            #adds experience to replay memory
+            replay.add((current_state,a,new_state,lr))
+    #        explist = []
+    #        for j in range(max(i-(replay_stepnum-1),0),i+1):
+    #            explist.append((states[j],Actions[i,:],rewards[i,:]))
+    #        replay.add(explist)
+            
+            replay_sample = replay.sample(min(i+1,batch_update_size))
+            
+            estimated_q = []
+            actual_q = []
+            for sample in (replay_sample):
+                output = net.predict(sample[0])
+                next_NN_value = net.predict(sample[2])
+                for agent_num in range(0,num_players):
+                    actual_q.append(sample[3][agent_num]+next_NN_value.V[agent_num])
+                    #print(output.V[agent_num]-0.5*(sample[1][agent_num]-output.mu[agent_num])*output.P1[agent_num]*(sample[1][agent_num]-output.mu[agent_num]))
+                    #print((sample[1][agent_num]-output.a[agent_num])*output.P2matrix[agent_num].dot(np.delete(sample[1],agent_num)-output.muNeg1[agent_num]))
+                    estimated_q.append(output.V[agent_num]-0.5*(sample[1][agent_num]-output.mu[agent_num])*output.P1[agent_num]*(sample[1][agent_num]-output.mu[agent_num])+
+                                       (sample[1][agent_num]-output.a[agent_num])*output.P2matrix[agent_num].dot(np.delete(sample[1],agent_num)-output.muNeg1[agent_num]))
+            
+            loss = net.criterion(Variable(torch.FloatTensor(np.array(estimated_q)),requires_grad=True), Variable(torch.FloatTensor(np.array(actual_q))))
+            net.optimizer.zero_grad()
+            loss.backward()
+            net.optimizer.step()
+            
+            total_l += sum(map(lambda a,b:(a-b)*(a-b),estimated_q,actual_q))
+        #print(replay.buffer)
+        sum_loss[k] = total_l
+        #print(prices)
+        #print(Qs)
+        #print(Actions)
+        sim.reset()
+    plt.plot(sum_loss)
+        
     
