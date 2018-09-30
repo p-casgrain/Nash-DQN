@@ -375,6 +375,7 @@ if __name__ == '__main__':
             
             #totals loss (of experience replay) per time step
             total_l += sum(map(lambda a,b:(a-b)*(a-b),estimated_q,actual_q))
+            current_state = new_state
 
         #defines loss per period
         sum_loss[k] = total_l
