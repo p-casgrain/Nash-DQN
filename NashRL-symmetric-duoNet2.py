@@ -227,7 +227,7 @@ class MarketSimulator(object):
         self.t = np.float32(0)
 
         self.last_reward = np.zeros( self.N, dtype=np.float32 )
-        self.total_reward = np.zeros(self.N, dtype=np.float32)
+        self.total_reward = np.zeros(self.N, dtype=np.float32 )
 
         self.dW = np.random.normal(0, np.sqrt(self.dt),
                                       int(round(np.ceil(self.T / self.dt) + 2 )))
