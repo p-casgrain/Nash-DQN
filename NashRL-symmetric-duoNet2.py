@@ -10,7 +10,6 @@ from itertools import count
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.autograd import Variable
 import torch.nn.functional as F
 #import torchvision.transforms as T
 
@@ -118,11 +117,11 @@ class NashNN():
         
     # Transforms state object into tensor
     def stateTransform(self, s):
-        return Variable(torch.from_numpy(s.getNormalizedState()).float()).view(1, -1)
+        return torch.tensor(s.getNormalizedState()).float()
         
     # Transforms output tensor into FittedValues Object
     def tensorTransform(self, output1, output2):
-        return FittedValues(output1[0], output2[0])
+        return FittedValues(output1, output2)
     
     
 #    #ignore these functions for now... was trying to do batch predictions 
@@ -397,12 +396,11 @@ if __name__ == '__main__':
                     #obtain estimated next state nash value
                     next_NN_value = net.predict_targetNet(sample[2])
                     #sample[0].print_state()
-                    
                     #cycle through all agents
                     for agent_num in range(0,num_players):
                         
                         #convert experience replay action/reward to auto_grad variables
-                        sample_a = Variable(torch.from_numpy(sample[1]).float())
+                        sample_a = torch.tensor(sample[1]).float()
                         sample_lr= sample[3]
                         #print("current sample:",sample)
                         
@@ -428,7 +426,9 @@ if __name__ == '__main__':
                             #flag = True
                             #print(sample_lr[agent_num])
                         else:
-                            actual_q.append(next_NN_value.V[agent_num].data.numpy() + sample_lr[agent_num])
+                            actual_q.append(next_NN_value.V[agent_num] + sample_lr[agent_num])
+
+                            #actual_q.append(next_NN_value.V[agent_num].data.numpy() + sample_lr[agent_num])
                             #calculate estimated value of state-action pair for agent(based on network output using advantage function)
                             estimated_q.append(output.V[agent_num]-0.5*(sample_a[agent_num]-output.mu[agent_num])*output.P1[agent_num]*(sample_a[agent_num]-output.mu[agent_num])+
                                            (sample_a[agent_num]-output.a[agent_num])*p2.dot(other_agenta-other_agentmu))
@@ -436,7 +436,8 @@ if __name__ == '__main__':
                 
                 #convert list of tensors into tensor and set actual_q to non-autograd variable (since its fixed value)
                 estimated_q = torch.stack(estimated_q)
-                actual_q = Variable(torch.from_numpy(np.array(actual_q, dtype=np.float32)))
+                actual_q = torch.tensor(actual_q)
+                #actual_q = Variable(torch.from_numpy(np.array(actual_q, dtype=np.float32)))
                 #actual_q = actual_q.detach()
                 
                 #define loss function, calc gradients and update
