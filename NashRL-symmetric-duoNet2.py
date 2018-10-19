@@ -137,15 +137,16 @@ class NashNN():
     
     #takes a tuple of transitions and outputs loss
     def compute_Loss(self,state_tuple):
-        currentState, nextState, action, reward = state_tuple[0], state_tuple[1], state_tuple[2], state_tuple[3]
+        currentState, action, nextState, reward = state_tuple[0], torch.tensor(state_tuple[1]).float(), state_tuple[2], state_tuple[3]
         A = lambda u, uNeg, mu, muNeg, a, v, c1, c2, c3: v - 0.5*c1*(u-mu)**2 + c2*(u -a)*torch.sum(uNeg - muNeg) + c3*(uNeg - muNeg)**2
-        nextVal = self.main_net(nextState).V
-        curVal = self.main_net(currentState)
+        nextVal = self.predict(nextState).V
+        curVal = self.predict(currentState)
         loss = []
         for i in range(0,self.num_players):
             r = lambda T : torch.cat([T[0:i], T[i+1:]])
-            loss.append[nextVal[i] + reward[i] - A(action[i],r(action),curVal.mu[i],r(curVal.mu),curVal.V[i],curVal.P1,curVal.P2,curVal.P3)]
-        return torch.sum(torch.tensor([loss])**2)
+            loss.append(nextVal[i] + reward[i] - A(action[i],r(action),curVal.mu[i],r(curVal.mu),curVal.a[i],curVal.V[i],curVal.P1,curVal.P2,curVal.P3))
+        
+        return torch.sum(torch.stack(loss)**2)
         
     def updateLearningRate(self):
         self.counter += 1
@@ -331,8 +332,11 @@ if __name__ == '__main__':
                 #samples from priority and calculate total loss
                 replay_sample.append((current_state,a,new_state,lr))
                 
-                loss = torch.sum(map(net.compute_Loss,replay_sample))                
+                loss = []
                 
+                for sample in replay_sample:              
+                    loss.append(net.compute_Loss(sample))
+                    
                 if (flag):
                     print(current_state.p,a,current_state.q)
                     #print("Estimated Reward",estimated_q[-num_players:])
@@ -340,6 +344,7 @@ if __name__ == '__main__':
                     print(net.predict(current_state).V.data.numpy())
                 
                 #loss = net.criterion(estimated_q, actual_q)
+                loss = torch.sum(torch.stack(loss))
                 
                 net.optimizer.zero_grad()
                 loss.backward()
