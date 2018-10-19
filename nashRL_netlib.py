@@ -40,7 +40,6 @@ class DQN(nn.Module):
             nn.Linear(20, 1)
         )
 
-
 class PermInvariantQNN(torch.nn.Module):
     block_size: int
     in_invar_dim: int
