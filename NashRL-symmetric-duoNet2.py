@@ -12,7 +12,8 @@ import torch.nn.functional as F
 #import torchvision.transforms as T
 
 from simulation_lib import *
-from NashRL_Lib import *
+from nashRL_netlib import *
+from nashRL_DQlib import *
 
 # -------------------------------------------------------------------
 # This file defines some of the necessary objects and classes needed
@@ -151,58 +152,7 @@ class NashNN():
     def updateLearningRate(self):
         self.counter += 1
         self.optimizer = optim.RMSprop(list(self.main_net.main.parameters()) + list(self.main_net.main_V.parameters()),lr=0.001-(0.001-0.0005)*self.counter/self.num_sim)
-    
-#    #ignore these functions for now... was trying to do batch predictions 
-#    def predict_batch(self, input):
-#        return self.tensorsTransform(self.main_net(self.statesTransform(input),batch_size = 3))
-#        
-#    # Transforms state object into tensor
-#    def statesTransform(self, s):
-#        print(np.array([st.getNormalizedState() for st in s]))
-#        return Variable(torch.from_numpy(np.array([st.getNormalizedState() for st in s])).float()).view(1, -1)
-#        
-#    # Transforms output tensor into FittedValues Object
-#    def tensorsTransform(self, output):
-#        return np.apply_along_axis(FittedValues(),1,output.data.numpy())
 
-# Define Replay Buffer Class using Transition Object
-#class ReplayMemory(object):
-#
-#    def __init__(self, capacity):
-#        self.capacity = capacity
-#        self.memory = []
-#        self.position = 0
-#
-#    def push(self, *args):
-#        """Saves a transition."""
-#        if len(self.memory) < self.capacity:
-#            self.memory.append(None)
-#        self.memory[self.position] = Transition(*args)
-#        self.position = (self.position + 1) % self.capacity
-#
-#    def sample(self, batch_size):
-#        return random.sample(self.memory, batch_size)
-#
-#    def __len__(self):
-#        return len(self.memory)
-
-
-class ExperienceReplay:
-    #each experience is a list of with each tuple having:
-    #first element: state,
-    #second element: array of actions of each agent,
-    #third element: array of rewards received for each agent
-    def __init__(self, buffer_size):
-        self.buffer = []
-        self.buffer_size = buffer_size
-    
-    def add(self,experience):
-        if len(self.buffer) > self.buffer_size:
-            self.buffer.pop(0)
-        self.buffer.append(experience)
-
-    def sample(self,size):
-        return random.sample(self.buffer,size)
 
 # Define Market Game Simulation Object
 if __name__ == '__main__':
