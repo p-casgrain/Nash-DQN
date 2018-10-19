@@ -2,8 +2,7 @@ import numpy as np
 from collections import namedtuple
 import random
 from itertools import count
-from per import SumTree
-from per import prioritized_memory
+from per.prioritized_memory import *
 
 # Define Transition Class as Named Tuple
 
