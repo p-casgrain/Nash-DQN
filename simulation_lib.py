@@ -1,4 +1,13 @@
 import numpy as np
+from collections import namedtuple
+from itertools import count
+
+
+
+# Define Transition Class as Named Tuple
+
+Transition = namedtuple('Transition',
+                        ('state', 'action', 'next_state', 'reward'))
 
 class MarketSimulator(object):
     def __init__(self,param_dict):
@@ -88,3 +97,5 @@ class MarketSimulator(object):
 
     def get_state(self):
         return (self.Q,self.S), self.last_reward, self.total_reward
+
+

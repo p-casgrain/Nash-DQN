@@ -4,8 +4,6 @@ import random
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
-from collections import namedtuple
-from itertools import count
 
 import torch
 import torch.nn as nn
@@ -21,12 +19,6 @@ from NashRL_Lib import *
 # for the LQ-Nash Reinforcement Learning Algorithm
 # -------------------------------------------------------------------
 
-
-
-# Define Transition Class as Named Tuple
-
-Transition = namedtuple('Transition',
-                        ('state', 'action', 'next_state', 'reward'))
 
 # Define object for estimated elements via NN
 # ***NOTE*** All elements are tensors
