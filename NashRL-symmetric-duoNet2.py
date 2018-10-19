@@ -41,14 +41,16 @@ class FittedValues(object):
         self.mu = value_vector[0:self.num_players] #mean of each player
         value_vector = value_vector[self.num_players:]
         
-        self.P1 = (value_vector[0:self.num_players])**2 #P1 matrix for each player, exp transformation to ensure positive value
-        value_vector = value_vector[self.num_players:]
+        self.P1 = (value_vector[0])**2 #P1 matrix for each player, exp transformation to ensure positive value
+        value_vector = value_vector[1:]
         
         self.a = value_vector[0:self.num_players] #a of each player
         value_vector = value_vector[self.num_players:]
         
         #p2 vector
-        self.P2matrix = value_vector[0:self.num_players] 
+        self.P2 = value_vector[0] 
+        
+        self.P3 = value_vector[1]
         
 # Define an object that summarizes all state variables
 class State(object):
@@ -70,9 +72,9 @@ class State(object):
 
 # Defines basic network parameters and functions
 class DQN(nn.Module):
-    def __init__(self, input_dim, output_dim):
+    def __init__(self, input_dim, output_dim,nump):
         super(DQN, self).__init__()
-        self.num_players = 3
+        self.num_players = nump
         # Define basic fully connected network for parameters in Advantage function
         self.main = nn.Sequential(
             nn.Linear(input_dim, 20),
@@ -112,10 +114,10 @@ class DQN(nn.Module):
         return self.main(input), self.main_V(input)
     
 class NashNN():
-    def __init__(self, input_dim, output_dim, num_players = 3):
-        self.num_players = num_players
+    def __init__(self, input_dim, output_dim, nump):
+        self.num_players = nump
 
-        self.main_net = DQN(input_dim, output_dim)
+        self.main_net = DQN(input_dim, output_dim,num_players)
         self.target_net = copy.deepcopy(self.main_net)
         self.num_sim = 10000
         # Define optimizer used (SGD, etc)
@@ -141,6 +143,18 @@ class NashNN():
     def tensorTransform(self, output1, output2):
         return FittedValues(output1, output2, self.num_players)
     
+    #takes a tuple of transitions and outputs loss
+    def compute_Loss(self,state_tuple):
+        currentState, nextState, action, reward = state_tuple[0], state_tuple[1], state_tuple[2], state_tuple[3]
+        A = lambda u, uNeg, mu, muNeg, a, v, c1, c2, c3: v - 0.5*c1*(u-mu)**2 + c2*(u -a)*torch.sum(uNeg - muNeg) + c3*(uNeg - muNeg)**2
+        nextVal = self.main_net(nextState).V
+        curVal = self.main_net(currentState)
+        loss = []
+        for i in range(0,self.num_players):
+            r = lambda T : torch.cat([T[0:i], T[i+1:]])
+            loss.append[nextVal[i] + reward[i] - A(action[i],r(action),curVal.mu[i],r(curVal.mu),curVal.V[i],curVal.P1,curVal.P2,curVal.P3)]
+        return torch.sum(torch.tensor([loss])**2)
+        
     def updateLearningRate(self):
         self.counter += 1
         self.optimizer = optim.RMSprop(list(self.main_net.main.parameters()) + list(self.main_net.main_V.parameters()),lr=0.001-(0.001-0.0005)*self.counter/self.num_sim)
@@ -209,10 +223,10 @@ if __name__ == '__main__':
     buffersize = 500
     
     #number of parameters that need to be estimated by the network
-    parameter_number = 4*num_players
+    parameter_number = 3*num_players +3
     
     #network object
-    net = NashNN(2+num_players,parameter_number)
+    net = NashNN(2+num_players,parameter_number,num_players)
     
     #simulation object
     sim_dict = {'price_impact': 0.5,
@@ -323,80 +337,24 @@ if __name__ == '__main__':
                 replay_sample = replay.sample(batch_update_size)
                 
                 #samples from priority and calculate total loss
-                estimated_q = []
-                actual_q = []
                 replay_sample.append((current_state,a,new_state,lr))
-                #print("entire sample", replay_sample)
                 
-                for sample in (replay_sample):
-                    #obtain estimated current state nash value
-                    output = net.predict(sample[0])
-                    #obtain estimated next state nash value
-                    next_NN_value = net.predict_targetNet(sample[2])
-                    #sample[0].print_state()
-                    #cycle through all agents
-                    for agent_num in range(0,num_players):
-                        
-                        #convert experience replay action/reward to auto_grad variables
-                        sample_a = torch.tensor(sample[1]).float()
-                        sample_lr= sample[3]
-                        #print("current sample:",sample)
-                        
-                        #define the vector mu_{-1} and estimatibles vector p_{i,2}, and mu_{-1}
-                        if agent_num == 0:
-                            other_agenta = sample_a[1:]
-                            p2 = output.P2matrix[1:]
-                            other_agentmu = output.mu[1:]
-                        elif agent_num == num_players-1:
-                            other_agenta = sample_a[0:-1]
-                            p2 = output.P2matrix[0:-1]
-                            other_agentmu = output.mu[0:-1]
-                        else:
-                            other_agenta = torch.cat((sample_a[0:agent_num],sample_a[agent_num+1:]))
-                            p2 = torch.cat((output.P2matrix[0:agent_num],output.P2matrix[agent_num+1:]))
-                            other_agentmu = torch.cat((output.mu[0:agent_num],output.mu[agent_num+1:]))
-                        
-                        #calculate actual value of state-action pair for agent (based on experienced reward + next state estimated nash)
-                        if sample[0].t == T-1:
-                            actual_q.append(sample_lr[agent_num])
-                            #calculate estimated value of state-action pair for agent(based on network output using advantage function)
-                            estimated_q.append(output.V[agent_num])
-                            #flag = True
-                            #print(sample_lr[agent_num])
-                        else:
-                            actual_q.append(next_NN_value.V[agent_num] + sample_lr[agent_num])
-
-                            #actual_q.append(next_NN_value.V[agent_num].data.numpy() + sample_lr[agent_num])
-                            #calculate estimated value of state-action pair for agent(based on network output using advantage function)
-                            estimated_q.append(output.V[agent_num]-0.5*(sample_a[agent_num]-output.mu[agent_num])*output.P1[agent_num]*(sample_a[agent_num]-output.mu[agent_num])+
-                                           (sample_a[agent_num]-output.a[agent_num])*p2.dot(other_agenta-other_agentmu))
-                        
-                
-                #convert list of tensors into tensor and set actual_q to non-autograd variable (since its fixed value)
-                estimated_q = torch.stack(estimated_q)
-                actual_q = torch.tensor(actual_q)
-                #actual_q = Variable(torch.from_numpy(np.array(actual_q, dtype=np.float32)))
-                #actual_q = actual_q.detach()
-                
-                #define loss function, calc gradients and update
-                #if flag:
-                    #print(net.predict(current_state).V.data.numpy())
-                    #print(lr)
-                    #print(estimated_q,actual_q)
+                loss = torch.sum(map(net.compute_Loss,replay_sample))                
                 
                 if (flag):
                     print(current_state.p,a,current_state.q)
-                    print("Estimated Reward",estimated_q[-num_players:])
-                    print("Actual Reward",actual_q[-num_players:])
+                    #print("Estimated Reward",estimated_q[-num_players:])
+                    #print("Actual Reward",actual_q[-num_players:])
                     print(net.predict(current_state).V.data.numpy())
                 
-                loss = net.criterion(estimated_q, actual_q)
+                #loss = net.criterion(estimated_q, actual_q)
+                
                 net.optimizer.zero_grad()
                 loss.backward()
                 net.optimizer.step()
                 
                 #totals loss (of experience replay) per time step
-                total_l += sum(map(lambda a,b:(a-b)*(a-b),estimated_q,actual_q))
+                #total_l += sum(map(lambda a,b:(a-b)*(a-b),estimated_q,actual_q))
                 #current_state = new_state
                 
                 
