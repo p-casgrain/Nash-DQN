@@ -5,14 +5,14 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-#import torchvision.transforms as T
+# import torchvision.transforms as T
 from torch.nn.parameter import Parameter
 
 
 class DQN(nn.Module):
-    def __init__(self, input_dim, output_dim):
+    def __init__(self, input_dim, output_dim, num_players = 3):
         super(DQN, self).__init__()
-        self.num_players = 3
+        self.num_players = num_players
         # Define basic fully connected network for parameters in Advantage function
         self.main = nn.Sequential(
             nn.Linear(input_dim, 20),
@@ -34,11 +34,11 @@ class DQN(nn.Module):
             nn.ReLU(),
             nn.Linear(40, 20),
             nn.ReLU(),
-            nn.Linear(20, num_players)
+            nn.Linear(20, self.num_players)
         )
 
         self.main_VMinus = nn.Sequential(
-            nn.Linear(input_dim + num_players - 1, 20),
+            nn.Linear(input_dim + self.num_players - 1, 20),
             nn.ReLU(),
             nn.Linear(20, 40),
             nn.ReLU(),
@@ -48,7 +48,6 @@ class DQN(nn.Module):
         )
 
 
-
 class BlockPermInvariantLinear(torch.nn.Module):
     """
     This  an nn.Linear layer that is invariant to block permutations of the input.
@@ -56,7 +55,8 @@ class BlockPermInvariantLinear(torch.nn.Module):
     Assume input is composed of blocks [A1,A2,...,An] each of size `block_size`.
     By default, `block_size` is assumed to be 1..
     """
-    def __init__(self, in_features, out_features, block_size = 1, bias=True):
+
+    def __init__(self, in_features, out_features, block_size=1, bias=True):
 
         super(BlockPermInvariantLinear, self).__init__()
 
@@ -65,7 +65,7 @@ class BlockPermInvariantLinear(torch.nn.Module):
         self.out_features = out_features
         self.block_size = block_size
 
-        assert  (self.in_features)%(self.block_size), "in_features must be a multiple of block size."
+        assert (self.in_features) % (self.block_size), "in_features must be a multiple of block size."
 
         # Generate one row of rank-1 matrix, store as parameter, as well as bias
         # Register both as parameters
@@ -77,7 +77,7 @@ class BlockPermInvariantLinear(torch.nn.Module):
         self.reset_parameters()
 
         # Define full matrix used in linear transformation, uses repeated single row
-        self.rep_weight = self.weight.repeat(1,self.in_features/self.block_size)
+        self.rep_weight = self.weight.repeat(1, self.in_features / self.block_size)
 
     def forward(self, x):
         return F.linear(input, self.rep_weight, self.bias)
@@ -89,11 +89,8 @@ class BlockPermInvariantLinear(torch.nn.Module):
             self.bias.data.uniform_(-stdv, stdv)
 
 
-
-
 class PermInvariantQNN(torch.nn.Module):
-    def __init__(self, in_invar_dim, non_invar_dim, out_dim, block_size=1, num_moments = 5):
-
+    def __init__(self, in_invar_dim, non_invar_dim, out_dim, block_size=1, num_moments=5):
         super(PermInvariantQNN, self).__init__()
 
         # Store input and output dimensions
@@ -104,7 +101,7 @@ class PermInvariantQNN(torch.nn.Module):
         self.out_dim = out_dim
 
         # Verify invariant dimension is multiple of block size
-        assert  (self.in_invar_dim)%(self.block_size), "in_invar_dim must be a multiple of block size."
+        assert (self.in_invar_dim) % (self.block_size), "in_invar_dim must be a multiple of block size."
 
         # Compute Number of blocks
         self.num_blocks = self.in_invar_dim / self.block_size
@@ -126,21 +123,16 @@ class PermInvariantQNN(torch.nn.Module):
             nn.Linear(20, self.out_dim)
         )
 
-    def apply(func, M):
-        tList = [func(m) for m in torch.unbind(M, dim=0)]
-        res = torch.stack(tList, dim=0)
-
-        return res
-
-    apply(torch.inverse, torch.randn(100, 200, 200))
-
     def forward(self, invar_input, non_invar_input):
+        # Reshape invar_input into blocks and compute "moments"
+        invar_split = torch.split(invar_input, self.block_size, dim=-1)
+        invar_moments = sum((self.moment_encoder_net(ch) for ch in invar_split))
+        invar_moments = invar_moments / self.num_blocks
 
-        if self.block_size>1:
-            # Reshape invar_input into blocks
-            split_invar_input = torch.split(invar_input, self.block_size, dim=-1)
+        # Concat moment vector with non-invariant input and pipe into next layer
+        cat_input = torch.cat((invar_moments, non_invar_input), dim=-1)
 
+        # Output Final Tensor
+        out_tensor = self.decoder_net(cat_input)
 
-
-
-
+        return out_tensor
