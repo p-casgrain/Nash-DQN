@@ -4,8 +4,6 @@ import random
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
-from collections import namedtuple
-from itertools import count
 
 import torch
 import torch.nn as nn
@@ -21,12 +19,6 @@ from NashRL_Lib import *
 # for the LQ-Nash Reinforcement Learning Algorithm
 # -------------------------------------------------------------------
 
-
-
-# Define Transition Class as Named Tuple
-
-Transition = namedtuple('Transition',
-                        ('state', 'action', 'next_state', 'reward'))
 
 # Define object for estimated elements via NN
 # ***NOTE*** All elements are tensors
@@ -69,43 +61,7 @@ class State(object):
         print("t =", self.t, "q = ", self.q, "p = ", self.p)
 
 # Defines basic network parameters and functions
-class DQN(nn.Module):
-    def __init__(self, input_dim, output_dim):
-        super(DQN, self).__init__()
-        self.num_players = 3
-        # Define basic fully connected network for parameters in Advantage function
-        self.main = nn.Sequential(
-            nn.Linear(input_dim, 20),
-            nn.ReLU(),
-            nn.Linear(20, 60),
-            nn.ReLU(),
-            nn.Linear(60, 160),
-            nn.ReLU(),
-            nn.Linear(160, 60),
-            nn.ReLU(),
-            nn.Linear(60, output_dim)
-        )
-        
-        # Define basic fully connected network for estimating nash value of each state
-        self.main_V = nn.Sequential(
-            nn.Linear(input_dim, 20),
-            nn.ReLU(),
-            nn.Linear(20, 40),
-            nn.ReLU(),
-            nn.Linear(40, 20),
-            nn.ReLU(),
-            nn.Linear(20, num_players)
-        )
-        
-        self.main_VMinus = nn.Sequential(
-            nn.Linear(input_dim+num_players-1,20),
-            nn.ReLU(),
-            nn.Linear(20, 40),
-            nn.ReLU(),
-            nn.Linear(40, 20),
-            nn.ReLU(),
-            nn.Linear(20, 1)
-        )
+
         
     #Since only single network, forward prop is simple evaluation of network
     def forward(self, input):
