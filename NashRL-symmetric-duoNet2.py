@@ -36,7 +36,7 @@ class FittedValues(object):
         self.mu = value_vector[0:self.num_players] #mean of each player
         value_vector = value_vector[self.num_players:]
         
-        self.P1 = torch.exp(value_vector[0:self.num_players]) #P1 matrix for each player, exp transformation to ensure positive value
+        self.P1 = (value_vector[0:self.num_players])**2 #P1 matrix for each player, exp transformation to ensure positive value
         value_vector = value_vector[self.num_players:]
         
         self.a = value_vector[0:self.num_players] #a of each player
@@ -92,6 +92,16 @@ class DQN(nn.Module):
             nn.Linear(20, num_players)
         )
         
+        self.main_VMinus = nn.Sequential(
+            nn.Linear(input_dim+num_players-1,20),
+            nn.ReLU(),
+            nn.Linear(20, 40),
+            nn.ReLU(),
+            nn.Linear(40, 20),
+            nn.ReLU(),
+            nn.Linear(20, 1)
+        )
+        
     #Since only single network, forward prop is simple evaluation of network
     def forward(self, input):
         return self.main(input), self.main_V(input)
@@ -100,11 +110,12 @@ class NashNN():
     def __init__(self, input_dim, output_dim):
         self.main_net = DQN(input_dim, output_dim)
         self.target_net = copy.deepcopy(self.main_net)
-        
+        self.num_sim = 10000
         # Define optimizer used (SGD, etc)
         self.optimizer = optim.RMSprop(list(self.main_net.main.parameters()) + list(self.main_net.main_V.parameters()),lr=0.001)
         # Define loss function (Mean-squared, etc)
         self.criterion = nn.MSELoss()
+        self.counter = 0
         
         # Predicts resultant values, input a State object, outputs a FittedValues object
     def predict(self, input):
@@ -123,6 +134,9 @@ class NashNN():
     def tensorTransform(self, output1, output2):
         return FittedValues(output1, output2)
     
+    def updateLearningRate(self):
+        self.counter += 1
+        self.optimizer = optim.RMSprop(list(self.main_net.main.parameters()) + list(self.main_net.main_V.parameters()),lr=0.001-(0.001-0.0005)*self.counter/self.num_sim)
     
 #    #ignore these functions for now... was trying to do batch predictions 
 #    def predict_batch(self, input):
@@ -227,7 +241,7 @@ class MarketSimulator(object):
         self.t = np.float32(0)
 
         self.last_reward = np.zeros( self.N, dtype=np.float32 )
-        self.total_reward = np.zeros(self.N, dtype=np.float32 )
+        self.total_reward = np.zeros(self.N, dtype=np.float32)
 
         self.dW = np.random.normal(0, np.sqrt(self.dt),
                                       int(round(np.ceil(self.T / self.dt) + 2 )))
@@ -268,12 +282,13 @@ class MarketSimulator(object):
     
 if __name__ == '__main__':
     num_players = 3
-    T = 5
+    T = 3
     #replay_stepnum = 3
-    batch_update_size = 100
+    batch_update_size = 200
     num_sim = 10000
     max_action = 20
     update_net = 50
+    buffersize = 500
     
     #number of parameters that need to be estimated by the network
     parameter_number = 4*num_players
@@ -303,14 +318,18 @@ if __name__ == '__main__':
     state_dict = {'time_step':0,
                   'current_inventory':state[0],
                   'current_price':state[1]}
-    current_state = State(state_dict)    
-    states = [current_state]
+    current_state = State(state_dict) 
+    all_states = []
+    states = []
+    
+    all_predicts = []
+    preds = []
     
     #exploration chance
     ep = 0.5
     
     #intialize relay memory
-    replay = ExperienceReplay(200)
+    replay = ExperienceReplay(buffersize)
     
     sum_loss = np.zeros(num_sim)
     total_l = 0
@@ -373,6 +392,7 @@ if __name__ == '__main__':
             Qs[i,:] = new_state.q
             Actions[i,:] = a
             rewards[i] = lr
+            #preds.append[net.predict(current_state).V.data()]
             
             #adds experience to replay memory
             replay.add((current_state,a,new_state,lr))
@@ -447,9 +467,10 @@ if __name__ == '__main__':
                     #print(estimated_q,actual_q)
                 
                 if (flag):
-                    print(current_state.p,a)
+                    print(current_state.p,a,current_state.q)
                     print("Estimated Reward",estimated_q[-num_players:])
                     print("Actual Reward",actual_q[-num_players:])
+                    print(net.predict(current_state).V.data.numpy())
                 
                 loss = net.criterion(estimated_q, actual_q)
                 net.optimizer.zero_grad()
@@ -459,6 +480,7 @@ if __name__ == '__main__':
                 #totals loss (of experience replay) per time step
                 total_l += sum(map(lambda a,b:(a-b)*(a-b),estimated_q,actual_q))
                 #current_state = new_state
+                
                 
         flag = False
         #defines loss per period
@@ -471,6 +493,9 @@ if __name__ == '__main__':
         
         #resets simulation
         sim.reset()
+        all_states.append(states)
+        all_predicts.append(preds)
+        net.updateLearningRate()
         
     plt.plot(sum_loss)
         
