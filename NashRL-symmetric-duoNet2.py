@@ -12,7 +12,8 @@ import torch.nn.functional as F
 #import torchvision.transforms as T
 
 from simulation_lib import *
-from NashRL_Lib import *
+from nashRL_netlib import *
+from nashRL_DQlib import *
 
 # -------------------------------------------------------------------
 # This file defines some of the necessary objects and classes needed
@@ -197,9 +198,8 @@ class ExperienceReplay:
         if len(self.buffer) > self.buffer_size:
             self.buffer.pop(0)
         self.buffer.append(experience)
+        self.optimizer = optim.RMSprop(list(self.main_net.main.parameters()) + list(self.main_net.main_V.parameters()),lr=0.001-(0.001-0.0005)*self.counter/self.num_sim)
 
-    def sample(self,size):
-        return random.sample(self.buffer,size)
 
 # Define Market Game Simulation Object
 if __name__ == '__main__':

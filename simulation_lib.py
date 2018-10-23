@@ -1,13 +1,15 @@
 import numpy as np
 from collections import namedtuple
+import random
 from itertools import count
-
-
+from per.prioritized_memory import *
 
 # Define Transition Class as Named Tuple
 
 Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward'))
+
+
 
 class MarketSimulator(object):
     def __init__(self,param_dict):
@@ -99,3 +101,46 @@ class MarketSimulator(object):
         return (self.Q,self.S), self.last_reward, self.total_reward
 
 
+# Define an object that summarizes all state variables
+class State(object):
+    def __init__(self, param_dict):
+        self.t = param_dict['time_step']
+        self.q = param_dict['current_inventory']
+        self.p = param_dict['current_price']
+
+    # Returns list representation of all state variables normalized to be [-1,1]
+    # Not done yet
+    def getNormalizedState(self):
+        norm_q = self.q / 10
+        norm_p = (self.p - 10) / 10
+        norm_t = self.t / 4 - 1
+        return np.array(np.append(np.append(norm_q, norm_p), norm_t))
+
+    def print_state(self):
+        print("t =", self.t, "q = ", self.q, "p = ", self.p)
+
+
+class ExperienceReplay:
+    # each experience is a list of with each tuple having:
+    # first element: state,
+    # second element: array of actions of each agent,
+    # third element: array of rewards received for each agent
+    def __init__(self, buffer_size):
+        self.buffer = []
+        self.buffer_size = buffer_size
+
+    def add(self, experience):
+        if len(self.buffer) > self.buffer_size:
+            self.buffer.pop(0)
+        self.buffer.append(experience)
+
+    def sample(self, size):
+        return random.sample(self.buffer, size)
+
+    def __len__(self):
+        return len(self.buffer)
+
+
+class PriorityExperienceReplay(ExperienceReplay):
+    def __init__(self,buffer_size):
+        self.buffer = []
