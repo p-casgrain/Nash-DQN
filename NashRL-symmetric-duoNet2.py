@@ -91,26 +91,16 @@ class DQN(nn.Module):
             nn.Linear(20, num_players)
         )
         
-        self.main_VMinus = nn.Sequential(
-            nn.Linear(input_dim+num_players-1,20),
-            nn.ReLU(),
-            nn.Linear(20, 40),
-            nn.ReLU(),
-            nn.Linear(40, 20),
-            nn.ReLU(),
-            nn.Linear(20, 1)
-        )
-        
     #Since only single network, forward prop is simple evaluation of network
     def forward(self, input):
         return self.main(input), self.main_V(input)
     
 class NashNN():
-    def __init__(self, input_dim, output_dim, nump):
+    def __init__(self, input_dim, output_dim, nump,t):
         self.num_players = nump
-
+        self.T = t
         self.main_net = DQN(input_dim, output_dim,num_players)
-        self.target_net = copy.deepcopy(self.main_net)
+        #self.target_net = copy.deepcopy(self.main_net)
         self.num_sim = 10000
         # Define optimizer used (SGD, etc)
         self.optimizer = optim.RMSprop(list(self.main_net.main.parameters()) + list(self.main_net.main_V.parameters()),lr=0.001)
@@ -123,9 +113,9 @@ class NashNN():
         a,b = self.main_net.forward(self.stateTransform(input))
         return self.tensorTransform(a,b)
     
-    def predict_targetNet(self, input):
-        a,b = self.target_net.forward(self.stateTransform(input))
-        return self.tensorTransform(a,b)
+#    def predict_targetNet(self, input):
+#        a,b = self.target_net.forward(self.stateTransform(input))
+#        return self.tensorTransform(a,b)
         
     # Transforms state object into tensor
     def stateTransform(self, s):
@@ -139,18 +129,25 @@ class NashNN():
     def compute_Loss(self,state_tuple):
         currentState, action, nextState, reward = state_tuple[0], torch.tensor(state_tuple[1]).float(), state_tuple[2], state_tuple[3]
         A = lambda u, uNeg, mu, muNeg, a, v, c1, c2, c3: v - 0.5*c1*(u-mu)**2 + c2*(u -a)*torch.sum(uNeg - muNeg) + c3*(uNeg - muNeg)**2
+        flag = 1
         nextVal = self.predict(nextState).V
+        
+        #set next nash value to be 0 if last time step
+        if nextState.t >= self.T:
+            nextVal = torch.zeros(self.num_players)
+            flag = 0
+            
         curVal = self.predict(currentState)
         loss = []
         for i in range(0,self.num_players):
             r = lambda T : torch.cat([T[0:i], T[i+1:]])
-            loss.append(nextVal[i] + reward[i] - A(action[i],r(action),curVal.mu[i],r(curVal.mu),curVal.a[i],curVal.V[i],curVal.P1,curVal.P2,curVal.P3))
+            loss.append(nextVal[i] + reward[i] - flag*A(action[i],r(action),curVal.mu[i],r(curVal.mu),curVal.a[i],curVal.V[i],curVal.P1,curVal.P2,curVal.P3)-(1-flag)*curVal.V[i])
         
         return torch.sum(torch.stack(loss)**2)
         
     def updateLearningRate(self):
         self.counter += 1
-        self.optimizer = optim.RMSprop(list(self.main_net.main.parameters()) + list(self.main_net.main_V.parameters()),lr=0.001-(0.001-0.0005)*self.counter/self.num_sim)
+        self.optimizer = optim.RMSprop(list(self.main_net.main.parameters()) + list(self.main_net.main_V.parameters()),lr=0.005-(0.005-0.0005)*self.counter/self.num_sim)
     
 #    #ignore these functions for now... was trying to do batch predictions 
 #    def predict_batch(self, input):
@@ -206,8 +203,8 @@ class ExperienceReplay:
 
 # Define Market Game Simulation Object
 if __name__ == '__main__':
-    num_players = 3
-    T = 3
+    num_players = 2
+    T = 2
     #replay_stepnum = 3
     batch_update_size = 200
     num_sim = 10000
@@ -219,7 +216,7 @@ if __name__ == '__main__':
     parameter_number = 3*num_players +3
     
     #network object
-    net = NashNN(2+num_players,parameter_number,num_players)
+    net = NashNN(2+num_players,parameter_number,num_players,T)
     
     #simulation object
     sim_dict = {'price_impact': 0.5,
@@ -267,8 +264,8 @@ if __name__ == '__main__':
             print("Starting Inventory: ", sim.get_state()[0][0])
             flag = True
             
-        if k%update_net == 0:
-                net.target_net = copy.deepcopy(net.main_net)
+#        if k%update_net == 0:
+#                net.target_net = copy.deepcopy(net.main_net)
             
         for i in range(0,T):   
             state,lr,tr = sim.get_state()
@@ -339,8 +336,10 @@ if __name__ == '__main__':
                     
                 if (flag):
                     print(current_state.p,a,current_state.q)
-                    #print("Estimated Reward",estimated_q[-num_players:])
-                    #print("Actual Reward",actual_q[-num_players:])
+                    new_V = net.predict(new_state).V.data.numpy()
+                    if i == T-1:
+                        new_V = np.zeros(num_players)
+                    print(new_V+lr)
                     print(net.predict(current_state).V.data.numpy())
                 
                 #loss = net.criterion(estimated_q, actual_q)
