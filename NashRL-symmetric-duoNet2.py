@@ -14,12 +14,11 @@ import torch.nn.functional as F
 from simulation_lib import *
 from nashRL_netlib import *
 from nashRL_DQlib import *
-
+from prioritized_memory import *
 # -------------------------------------------------------------------
 # This file defines some of the necessary objects and classes needed
 # for the LQ-Nash Reinforcement Learning Algorithm
 # -------------------------------------------------------------------
-
 
 # Define object for estimated elements via NN
 # ***NOTE*** All elements are tensors
@@ -102,9 +101,9 @@ class NashNN():
         self.T = t
         self.main_net = DQN(input_dim, output_dim,num_players)
         #self.target_net = copy.deepcopy(self.main_net)
-        self.num_sim = 10000
+        self.num_sim = 5000
         # Define optimizer used (SGD, etc)
-        self.optimizer = optim.RMSprop(list(self.main_net.main.parameters()) + list(self.main_net.main_V.parameters()),lr=0.001)
+        self.optimizer = optim.RMSprop(list(self.main_net.main.parameters()) + list(self.main_net.main_V.parameters()),lr=0.01)
         # Define loss function (Mean-squared, etc)
         self.criterion = nn.MSELoss()
         self.counter = 0
@@ -128,27 +127,43 @@ class NashNN():
     
     #takes a tuple of transitions and outputs loss
     def compute_Loss(self,state_tuple):
-        currentState, action, nextState, reward = state_tuple[0], torch.tensor(state_tuple[1]).float(), state_tuple[2], state_tuple[3]
-        A = lambda u, uNeg, mu, muNeg, a, v, c1, c2, c3: v - 0.5*c1*(u-mu)**2 + c2*(u -a)*torch.sum(uNeg - muNeg) + c3*(uNeg - muNeg)**2
-        flag = 1
+        currentState, action, nextState, reward, isNash = state_tuple[0], torch.tensor(state_tuple[1]).float(), state_tuple[2], state_tuple[3], state_tuple[4]
+        #Q = lambda u, uNeg, mu, muNeg, a, v, c1, c2, c3: v - 0.5*c1*(u-mu)**2 + c2*(u -a)*torch.sum(uNeg - muNeg) + c3*(uNeg - muNeg)**2
         nextVal = self.predict(nextState).V
+        flag = 0
         
         #set next nash value to be 0 if last time step
-        if nextState.t >= self.T:
-            nextVal = torch.zeros(self.num_players)
-            flag = 0
-            
+        if nextState.t > self.T-1:
+            flag = 1
+        
         curVal = self.predict(currentState)
         loss = []
+        
         for i in range(0,self.num_players):
             r = lambda T : torch.cat([T[0:i], T[i+1:]])
-            loss.append(nextVal[i] + reward[i] - flag*A(action[i],r(action),curVal.mu[i],r(curVal.mu),curVal.a[i],curVal.V[i],curVal.P1,curVal.P2,curVal.P3)-(1-flag)*curVal.V[i])
+            A = lambda u, uNeg, mu, muNeg, a, c1, c2, c3: 0.5*c1*(u-mu)**2 + c2*(u -a)*torch.sum(uNeg - muNeg) + c3*(uNeg - muNeg)**2
+            loss.append((1-flag)*nextVal[i] + flag*nextState.q[i]*(nextState.p-50*nextState.q[i])  + reward[i] - curVal.V[i] + A(action[i],r(action),curVal.mu[i],r(curVal.mu),curVal.a[i],curVal.P1,curVal.P2,curVal.P3))
+        
+#        if all(isNash):
+#            for i in range(0,self.num_players):
+#                loss.append(nextVal[i] + reward[i] - curVal.V[i])
+#        else:
+#            #note that this assumes that at most one person did not take nash action
+#            for i in range(0,self.num_players):
+#                r = lambda T : torch.cat([T[0:i], T[i+1:]])
+#                if isNash[i]:
+#                    loss.append(nextVal[i] + reward[i] - curVal.V[i].detach() - curVal.P2*(action[i] -curVal.a[i])*torch.sum(r(action) - r(curVal.mu)) - curVal.P3*(torch.sum(r(action) - r(curVal.mu))**2))
+#                else:
+#                    loss.append(nextVal[i] + reward[i] - curVal.V[i].detach() + 0.5*curVal.P1*(action[i]-curVal.mu[i])**2)
+#                    #A(action[i],r(action),curVal.mu[i],r(curVal.mu),curVal.a[i],curVal.V[i].detach(),curVal.P1,curVal.P2,curVal.P3)
+                    
+
         
         return torch.sum(torch.stack(loss)**2)
         
     def updateLearningRate(self):
         self.counter += 1
-        self.optimizer = optim.RMSprop(list(self.main_net.main.parameters()) + list(self.main_net.main_V.parameters()),lr=0.005-(0.005-0.0005)*self.counter/self.num_sim)
+        self.optimizer = optim.RMSprop(list(self.main_net.main.parameters()) + list(self.main_net.main_V.parameters()),lr=0.01-(0.01-0.003)*self.counter/self.num_sim)
     
 #    #ignore these functions for now... was trying to do batch predictions 
 #    def predict_batch(self, input):
@@ -185,20 +200,20 @@ class NashNN():
 #        return len(self.memory)
 
 
-class ExperienceReplay:
-    #each experience is a list of with each tuple having:
-    #first element: state,
-    #second element: array of actions of each agent,
-    #third element: array of rewards received for each agent
-    def __init__(self, buffer_size):
-        self.buffer = []
-        self.buffer_size = buffer_size
-    
-    def add(self,experience):
-        if len(self.buffer) > self.buffer_size:
-            self.buffer.pop(0)
-        self.buffer.append(experience)
-        self.optimizer = optim.RMSprop(list(self.main_net.main.parameters()) + list(self.main_net.main_V.parameters()),lr=0.001-(0.001-0.0005)*self.counter/self.num_sim)
+#class ExperienceReplay:
+#    #each experience is a list of with each tuple having:
+#    #first element: state,
+#    #second element: array of actions of each agent,
+#    #third element: array of rewards received for each agent
+#    def __init__(self, buffer_size):
+#        self.buffer = []
+#        self.buffer_size = buffer_size
+#    
+#    def add(self,experience):
+#        if len(self.buffer) > self.buffer_size:
+#            self.buffer.pop(0)
+#        self.buffer.append(experience)
+#        self.optimizer = optim.RMSprop(list(self.main_net.main.parameters()) + list(self.main_net.main_V.parameters()),lr=0.001-(0.001-0.0005)*self.counter/self.num_sim)
 
 
 # Define Market Game Simulation Object
@@ -207,10 +222,10 @@ if __name__ == '__main__':
     T = 2
     #replay_stepnum = 3
     batch_update_size = 200
-    num_sim = 10000
+    num_sim = 5000
     max_action = 20
     update_net = 50
-    buffersize = 500
+    buffersize = 300
     
     #number of parameters that need to be estimated by the network
     parameter_number = 3*num_players +3
@@ -251,13 +266,13 @@ if __name__ == '__main__':
     ep = 0.5
     
     #intialize relay memory
-    replay = ExperienceReplay(buffersize)
+    replay = PrioritizedMemory(buffersize)
     
     sum_loss = np.zeros(num_sim)
     total_l = 0
     
     for k in range (0,num_sim):
-        epsilon = ep - ep*(k/(num_sim-1))
+        epsilon = ep - (ep-0.05)*(k/(num_sim-1))
         total_l = 0
         
         if k%50 == 0:
@@ -278,16 +293,34 @@ if __name__ == '__main__':
             #print(net.predict(current_state).mu)
             #takes action
             if i == T-1:
-                a = -current_state.q
-                #print (net.predict(current_state).V.data.numpy())
-            else:
                 if np.random.random() < epsilon:
-                    #random action between buying/selling 5 shares for all players
-                    a = np.random.rand(num_players)*40-20
-                    #print("r")
+                    #random action between buying/selling 20 shares for all players
+                    a = net.predict(current_state).mu.data.numpy()
+                    a = a + np.random.normal(0, 2.5, num_players)
+#                    rand_player = np.random.randint(0,num_players)
+#                    a[rand_player] = np.random.rand()*40-20
+                    isNash = [True] * num_players
+#                    isNash[rand_player] = False
                 else:
                     #else take predicted nash action
                     a = net.predict(current_state).mu.data.numpy()
+                    isNash = [True] * num_players
+                #a = -current_state.q
+                #isNash = [True] * num_players
+                #print (net.predict(current_state).V.data.numpy())
+            else:
+                if np.random.random() < epsilon:
+                    #random action between buying/selling 20 shares for all players
+                    a = net.predict(current_state).mu.data.numpy()
+                    a = a + np.random.normal(0, 2.5, num_players)
+#                    rand_player = np.random.randint(0,num_players)
+#                    a[rand_player] = np.random.rand()*40-20
+                    isNash = [True] * num_players
+#                    isNash[rand_player] = False
+                else:
+                    #else take predicted nash action
+                    a = net.predict(current_state).mu.data.numpy()
+                    isNash = [True] * num_players
                     #print(a)
                 super_threshold_indices = a > max_action
                 a[super_threshold_indices] = max_action
@@ -316,43 +349,127 @@ if __name__ == '__main__':
             rewards[i] = lr
             #preds.append[net.predict(current_state).V.data()]
             
-            #adds experience to replay memory
-            replay.add((current_state,a,new_state,lr))
+            #creates experience element
+            experience = (current_state,a,new_state,lr,isNash)
+            #computes loss on new experience
+            new_loss = net.compute_Loss(experience).data.numpy()
+            #adds new experience to replay memory
+            replay.add(new_loss,experience)
     #        explist = []
     #        for j in range(max(i-(replay_stepnum-1),0),i+1):
     #            explist.append((states[j],Actions[i,:],rewards[i,:]))
     #        replay.add(explist)
             
-            if (k-1)*T > batch_update_size:
-                replay_sample = replay.sample(batch_update_size)
+            #if (k-1)*T > batch_update_size:
+            replay_sample, index, weights = replay.sample(batch_update_size)
+            
+            
+            loss = []
+            #defined new list for replay - can delete and switch to loss later
+            pro_loss = []
+            
+            for sample in replay_sample: 
+                cur_loss = net.compute_Loss(sample)
+                loss.append(cur_loss)
+                pro_loss.append(cur_loss.data.numpy().item())
                 
-                #samples from priority and calculate total loss
-                replay_sample.append((current_state,a,new_state,lr))
                 
-                loss = []
-                
-                for sample in replay_sample:              
-                    loss.append(net.compute_Loss(sample))
-                    
-                if (flag):
-                    print(current_state.p,a,current_state.q)
-                    new_V = net.predict(new_state).V.data.numpy()
-                    if i == T-1:
-                        new_V = np.zeros(num_players)
-                    print(new_V+lr)
-                    print(net.predict(current_state).V.data.numpy())
-                
-                #loss = net.criterion(estimated_q, actual_q)
-                loss = torch.sum(torch.stack(loss))
-                
-                net.optimizer.zero_grad()
-                loss.backward()
-                net.optimizer.step()
-                
-                #totals loss (of experience replay) per time step
-                #total_l += sum(map(lambda a,b:(a-b)*(a-b),estimated_q,actual_q))
-                #current_state = new_state
-                
+#            if (flag):
+#                print("Transition: ",current_state.p,a,current_state.q)
+#                new_V = net.predict(new_state).V.data.numpy()
+#                if i == T-1:
+#                    new_V = np.zeros(num_players)
+#                print("Actual Value: ",new_V+lr)
+#                print("Last Reward: ",lr)
+#                print("Next V: ", new_V)
+#                print("Predicted State Value: ", net.predict(current_state).V.data.numpy())
+#                curVal = net.predict(current_state)
+#                temp = []
+#                action = torch.tensor(a).float()
+#                for j in range(0,num_players):
+#                    r = lambda w : torch.cat([w[0:j], w[j+1:]])
+#                    A = lambda u, uNeg, mu, muNeg, a, v, c1, c2, c3: v - 0.5*c1*(u-mu)**2 + c2*(u -a)*torch.sum(uNeg - muNeg) + c3*(uNeg - muNeg)**2
+#                    temp.append(A(action[j],r(action),curVal.mu[j],r(curVal.mu),curVal.a[j],0,curVal.P1,curVal.P2,curVal.P3).data.numpy().item())
+#                formTemp = [ '%.2f' % elem for elem in temp ]
+#                if i == T-1:
+#                    formTemp = net.predict(current_state).V.data.numpy()
+#                print("Predicted Q Value: ", formTemp)
+#                print("Predicted Nash Action: ", curVal.mu.data.numpy())
+#                print("")
+            
+            #loss = net.criterion(estimated_q, actual_q)
+            loss = torch.sum(torch.stack(loss))
+            
+            net.optimizer.zero_grad()
+            loss.backward()
+            net.optimizer.step()
+            
+            #update priority replay
+            replay.update(index,pro_loss)
+            
+            cur_loss = net.compute_Loss(experience).data.numpy()
+            total_l += cur_loss
+            
+            if (flag):
+                curVal = net.predict(current_state)
+                print("Transition: ",current_state.p,a,current_state.q)
+                print("Predicted Nash Action: ", curVal.mu.data.numpy())
+                print(cur_loss)
+            
+#            if (flag):
+#                print("Predicted State Value: ", net.predict(current_state).V.data.numpy())
+#                curVal = net.predict(current_state)
+#                temp = []
+#                action = torch.tensor(a).float()
+#                for j in range(0,num_players):
+#                    r = lambda w : torch.cat([w[0:j], w[j+1:]])
+#                    A = lambda u, uNeg, mu, muNeg, a, v, c1, c2, c3: v - 0.5*c1*(u-mu)**2 + c2*(u -a)*torch.sum(uNeg - muNeg) + c3*(uNeg - muNeg)**2
+#                    temp.append(A(action[j],r(action),curVal.mu[j],r(curVal.mu),curVal.a[j],0,curVal.P1,curVal.P2,curVal.P3).data.numpy().item())
+#                formTemp = [ '%.2f' % elem for elem in temp ]
+#                if i == T-1:
+#                    formTemp = net.predict(current_state).V.data.numpy()
+#                print("Predicted Q Value: ", formTemp)
+#                print("Predicted Nash Action: ", curVal.mu.data.numpy())
+#                print("")
+            #totals loss (of experience replay) per time step
+            #total_l += sum(map(lambda a,b:(a-b)*(a-b),estimated_q,actual_q))
+            #current_state = new_state
+#            if (flag):
+#                print("-------------------------------------------test--------------------------------------")
+#                print("Predicted State Value: ", net.predict(current_state).V.data.numpy())
+#                curVal = net.predict(current_state)
+#                temp = []
+#                action = torch.tensor(a).float()
+#                for j in range(0,num_players):
+#                    r = lambda w : torch.cat([w[0:j], w[j+1:]])
+#                    A = lambda u, uNeg, mu, muNeg, a, v, c1, c2, c3: v - 0.5*c1*(u-mu)**2 + c2*(u -a)*torch.sum(uNeg - muNeg) + c3*(uNeg - muNeg)**2
+#                    temp.append(A(action[j],r(action),curVal.mu[j],r(curVal.mu),curVal.a[j],0,curVal.P1,curVal.P2,curVal.P3).data.numpy().item())
+#                formTemp = [ '%.2f' % elem for elem in temp ]
+#                if i == T-1:
+#                    formTemp = net.predict(current_state).V.data.numpy()
+#                print("Predicted Q Value: ", formTemp)
+#                print("Predicted Nash Action: ", curVal.mu.data.numpy())
+#                print("")
+#                loss = net.compute_Loss(experience)
+#                net.optimizer.zero_grad()
+#                loss.backward()
+#                net.optimizer.step()    
+#                print("Predicted State Value: ", net.predict(current_state).V.data.numpy())
+#                curVal = net.predict(current_state)
+#                temp = []
+#                action = torch.tensor(a).float()
+#                for j in range(0,num_players):
+#                    r = lambda w : torch.cat([w[0:j], w[j+1:]])
+#                    A = lambda u, uNeg, mu, muNeg, a, v, c1, c2, c3: v - 0.5*c1*(u-mu)**2 + c2*(u -a)*torch.sum(uNeg - muNeg) + c3*(uNeg - muNeg)**2
+#                    temp.append(A(action[j],r(action),curVal.mu[j],r(curVal.mu),curVal.a[j],0,curVal.P1,curVal.P2,curVal.P3).data.numpy().item())
+#                formTemp = [ '%.2f' % elem for elem in temp ]
+#                if i == T-1:
+#                    formTemp = net.predict(current_state).V.data.numpy()
+#                print("Predicted Q Value: ", formTemp)
+#                print("Predicted Nash Action: ", curVal.mu.data.numpy())
+#                print("")
+#                print("-------------------------------------------test--------------------------------------")
+            
                 
         flag = False
         #defines loss per period
