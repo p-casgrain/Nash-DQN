@@ -43,7 +43,6 @@ class FittedValues(object):
         self.P2 = value_vector[0] 
         
         self.P3 = value_vector[1]
-        
 # Define an object that summarizes all state variables
 class State(object):
     def __init__(self,param_dict):
@@ -266,8 +265,9 @@ if __name__ == '__main__':
     ep = 0.5
     
     #intialize relay memory
-    replay = PrioritizedMemory(buffersize)
-    
+    # replay = PrioritizedMemory(buffersize)
+    replay = ExperienceReplay(buffersize)
+
     sum_loss = np.zeros(num_sim)
     total_l = 0
     
@@ -353,15 +353,20 @@ if __name__ == '__main__':
             experience = (current_state,a,new_state,lr,isNash)
             #computes loss on new experience
             new_loss = net.compute_Loss(experience).data.numpy()
+
             #adds new experience to replay memory
-            replay.add(new_loss,experience)
+            # replay.add(new_loss,experience)
+            replay.add(experience)
+
     #        explist = []
     #        for j in range(max(i-(replay_stepnum-1),0),i+1):
     #            explist.append((states[j],Actions[i,:],rewards[i,:]))
     #        replay.add(explist)
             
             #if (k-1)*T > batch_update_size:
-            replay_sample, index, weights = replay.sample(batch_update_size)
+            # replay_sample, index, weights = replay.sample(batch_update_size)
+            replay_sample = replay.sample(batch_update_size)
+
             
             
             loss = []
@@ -405,7 +410,8 @@ if __name__ == '__main__':
             net.optimizer.step()
             
             #update priority replay
-            replay.update(index,pro_loss)
+            # replay.update(index,pro_loss)
+
             
             cur_loss = net.compute_Loss(experience).data.numpy()
             total_l += cur_loss
@@ -415,61 +421,7 @@ if __name__ == '__main__':
                 print("Transition: ",current_state.p,a,current_state.q)
                 print("Predicted Nash Action: ", curVal.mu.data.numpy())
                 print(cur_loss)
-            
-#            if (flag):
-#                print("Predicted State Value: ", net.predict(current_state).V.data.numpy())
-#                curVal = net.predict(current_state)
-#                temp = []
-#                action = torch.tensor(a).float()
-#                for j in range(0,num_players):
-#                    r = lambda w : torch.cat([w[0:j], w[j+1:]])
-#                    A = lambda u, uNeg, mu, muNeg, a, v, c1, c2, c3: v - 0.5*c1*(u-mu)**2 + c2*(u -a)*torch.sum(uNeg - muNeg) + c3*(uNeg - muNeg)**2
-#                    temp.append(A(action[j],r(action),curVal.mu[j],r(curVal.mu),curVal.a[j],0,curVal.P1,curVal.P2,curVal.P3).data.numpy().item())
-#                formTemp = [ '%.2f' % elem for elem in temp ]
-#                if i == T-1:
-#                    formTemp = net.predict(current_state).V.data.numpy()
-#                print("Predicted Q Value: ", formTemp)
-#                print("Predicted Nash Action: ", curVal.mu.data.numpy())
-#                print("")
-            #totals loss (of experience replay) per time step
-            #total_l += sum(map(lambda a,b:(a-b)*(a-b),estimated_q,actual_q))
-            #current_state = new_state
-#            if (flag):
-#                print("-------------------------------------------test--------------------------------------")
-#                print("Predicted State Value: ", net.predict(current_state).V.data.numpy())
-#                curVal = net.predict(current_state)
-#                temp = []
-#                action = torch.tensor(a).float()
-#                for j in range(0,num_players):
-#                    r = lambda w : torch.cat([w[0:j], w[j+1:]])
-#                    A = lambda u, uNeg, mu, muNeg, a, v, c1, c2, c3: v - 0.5*c1*(u-mu)**2 + c2*(u -a)*torch.sum(uNeg - muNeg) + c3*(uNeg - muNeg)**2
-#                    temp.append(A(action[j],r(action),curVal.mu[j],r(curVal.mu),curVal.a[j],0,curVal.P1,curVal.P2,curVal.P3).data.numpy().item())
-#                formTemp = [ '%.2f' % elem for elem in temp ]
-#                if i == T-1:
-#                    formTemp = net.predict(current_state).V.data.numpy()
-#                print("Predicted Q Value: ", formTemp)
-#                print("Predicted Nash Action: ", curVal.mu.data.numpy())
-#                print("")
-#                loss = net.compute_Loss(experience)
-#                net.optimizer.zero_grad()
-#                loss.backward()
-#                net.optimizer.step()    
-#                print("Predicted State Value: ", net.predict(current_state).V.data.numpy())
-#                curVal = net.predict(current_state)
-#                temp = []
-#                action = torch.tensor(a).float()
-#                for j in range(0,num_players):
-#                    r = lambda w : torch.cat([w[0:j], w[j+1:]])
-#                    A = lambda u, uNeg, mu, muNeg, a, v, c1, c2, c3: v - 0.5*c1*(u-mu)**2 + c2*(u -a)*torch.sum(uNeg - muNeg) + c3*(uNeg - muNeg)**2
-#                    temp.append(A(action[j],r(action),curVal.mu[j],r(curVal.mu),curVal.a[j],0,curVal.P1,curVal.P2,curVal.P3).data.numpy().item())
-#                formTemp = [ '%.2f' % elem for elem in temp ]
-#                if i == T-1:
-#                    formTemp = net.predict(current_state).V.data.numpy()
-#                print("Predicted Q Value: ", formTemp)
-#                print("Predicted Nash Action: ", curVal.mu.data.numpy())
-#                print("")
-#                print("-------------------------------------------test--------------------------------------")
-            
+
                 
         flag = False
         #defines loss per period

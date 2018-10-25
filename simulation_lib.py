@@ -127,15 +127,18 @@ class ExperienceReplay:
     # third element: array of rewards received for each agent
     def __init__(self, buffer_size):
         self.buffer = []
-        self.buffer_size = buffer_size
+        self.max_buffer_size = buffer_size
+        self.buffer_size = 0
 
     def add(self, experience):
-        if len(self.buffer) > self.buffer_size:
+        if len(self.buffer) > self.max_buffer_size:
             self.buffer.pop(0)
         self.buffer.append(experience)
 
+        self.buffer_size = len(self.buffer)
+
     def sample(self, size):
-        return random.sample(self.buffer, size)
+        return random.sample(self.buffer, min(size,self.buffer_size))
 
     def __len__(self):
         return len(self.buffer)
