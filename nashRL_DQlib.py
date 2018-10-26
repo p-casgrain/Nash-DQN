@@ -140,7 +140,7 @@ class NashNN2:
     def predict_action(self, invar_input, non_invar_input):
 
         # Assume a tensor of block invar inputs [Q0,...,QN] : ?xN
-        []
+
 
 
         self.NNmodel.forward()

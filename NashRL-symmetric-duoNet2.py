@@ -17,97 +17,21 @@ from nashRL_DQlib import *
 from prioritized_memory import *
 
 
-
-# Defines basic network parameters and functions
-class NashNN():
-    def __init__(self, input_dim, output_dim, nump,t):
-        self.num_players = nump
-        self.T = t
-        self.main_net = DQN(input_dim, output_dim,num_players)
-        #self.target_net = copy.deepcopy(self.main_net)
-        self.num_sim = 5000
-        # Define optimizer used (SGD, etc)
-        self.optimizer = optim.RMSprop(list(self.main_net.main.parameters()) + list(self.main_net.main_V.parameters()),lr=0.01)
-        # Define loss function (Mean-squared, etc)
-        self.criterion = nn.MSELoss()
-        self.counter = 0
-
-        # Predicts resultant values, input a State object, outputs a FittedValues object
-    def predict(self, input):
-        a,b = self.main_net.forward(self.stateTransform(input))
-        return self.tensorTransform(a,b)
-
-#    def predict_targetNet(self, input):
-#        a,b = self.target_net.forward(self.stateTransform(input))
-#        return self.tensorTransform(a,b)
-
-    # Transforms state object into tensor
-    def stateTransform(self, s):
-        return torch.tensor(s.getNormalizedState()).float()
-
-    # Transforms output tensor into FittedValues Object
-    def tensorTransform(self, output1, output2):
-        return FittedValues(output1, output2, self.num_players)
-
-    #takes a tuple of transitions and outputs loss
-    def compute_Loss(self,state_tuple):
-        currentState, action, nextState, reward, isNash = state_tuple[0], torch.tensor(state_tuple[1]).float(), state_tuple[2], state_tuple[3], state_tuple[4]
-        #Q = lambda u, uNeg, mu, muNeg, a, v, c1, c2, c3: v - 0.5*c1*(u-mu)**2 + c2*(u -a)*torch.sum(uNeg - muNeg) + c3*(uNeg - muNeg)**2
-        nextVal = self.predict(nextState).V
-        flag = 0
-
-        #set next nash value to be 0 if last time step
-        if nextState.t > self.T-1:
-            flag = 1
-
-        curVal = self.predict(currentState)
-        loss = []
-
-        for i in range(0,self.num_players):
-            r = lambda T : torch.cat([T[0:i], T[i+1:]])
-            A = lambda u, uNeg, mu, muNeg, a, c1, c2, c3: 0.5*c1*(u-mu)**2 + c2*(u -a)*torch.sum(uNeg - muNeg) + c3*(uNeg - muNeg)**2
-            loss.append( (1-flag)*nextVal[i] + flag*nextState.q[i]*(nextState.p-50*nextState.q[i])
-                         + reward[i]
-                         + A(action[i],r(action),curVal.mu[i],r(curVal.mu),curVal.a[i],curVal.P1,curVal.P2,curVal.P3)
-                         - curVal.V[i] )
-
-#        if all(isNash):
-#            for i in range(0,self.num_players):
-#                loss.append(nextVal[i] + reward[i] - curVal.V[i])
-#        else:
-#            #note that this assumes that at most one person did not take nash action
-#            for i in range(0,self.num_players):
-#                r = lambda T : torch.cat([T[0:i], T[i+1:]])
-#                if isNash[i]:
-#                    loss.append(nextVal[i] + reward[i] - curVal.V[i].detach() - curVal.P2*(action[i] -curVal.a[i])*torch.sum(r(action) - r(curVal.mu)) - curVal.P3*(torch.sum(r(action) - r(curVal.mu))**2))
-#                else:
-#                    loss.append(nextVal[i] + reward[i] - curVal.V[i].detach() + 0.5*curVal.P1*(action[i]-curVal.mu[i])**2)
-#                    #A(action[i],r(action),curVal.mu[i],r(curVal.mu),curVal.a[i],curVal.V[i].detach(),curVal.P1,curVal.P2,curVal.P3)
-
-
-
-        return torch.sum(torch.stack(loss)**2)
-
-    def updateLearningRate(self):
-        self.counter += 1
-        self.optimizer = optim.RMSprop(list(self.main_net.main.parameters()) + list(self.main_net.main_V.parameters()),lr=0.01-(0.01-0.003)*self.counter/self.num_sim)
-
-
-
 # Define Market Game Simulation Object
 if __name__ == '__main__':
     num_players = 2
     T = 2
     #replay_stepnum = 3
     batch_update_size = 200
-    num_sim = 5000
+    num_sim = 10
     max_action = 20
     update_net = 50
     buffersize = 300
     
     # Number of output variables needed from net
     # 1 x ( V + c1 + c2 + c3 + mu + a)
-    parameter_number = 6
+    parameter_number = 3 * num_players + 3
+    # parameter_number = 6
     
     #network object
     net = NashNN(2+num_players,parameter_number,num_players,T)
