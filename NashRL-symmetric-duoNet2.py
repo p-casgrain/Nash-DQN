@@ -30,8 +30,8 @@ class FittedValues(object):
 
         self.V = v_value #nash value vector
         
-        self.mu = value_vector[0:self.num_players] #mean of each player
-        value_vector = value_vector[self.num_players:]
+        self.mu = value_vector[0] #mean of current player
+        value_vector = value_vector[1:]
         
         self.P1 = (value_vector[0])**2 #P1 matrix for each player, exp transformation to ensure positive value
         value_vector = value_vector[1:]
@@ -43,12 +43,25 @@ class FittedValues(object):
         self.P2 = value_vector[0] 
         
         self.P3 = value_vector[1]
+        
+class NashFittedValues(object):
+    # Initialized via a single numpy vector
+    def __init__(self, fittedval, mu_vec):
+        self.num_players = fittedval.num_players #number of players in game
+        self.V = fittedval.V #nash value vector
+        self.a = fittedval.a
+        self.P1 = fittedval.P1
+        self.P2 = fittedval.P2
+        self.P3 = fittedval.P3
+        self.mu = mu_vec
+        
 # Define an object that summarizes all state variables
 class State(object):
     def __init__(self,param_dict):
         self.t = param_dict['time_step']
         self.q = param_dict['current_inventory']
         self.p = param_dict['current_price']
+        self.original_q = param_dict['current_inventory']
         
     # Returns list representation of all state variables normalized to be [-1,1]
     # Not done yet
@@ -60,7 +73,12 @@ class State(object):
     
     def print_state(self):
         print("t =", self.t, "q = ", self.q, "p = ", self.p)
-
+        
+    def permute(self,player_num):
+        self.q = np.delete(np.insert(self.q,0,self.q[player_num]),player_num+1)
+        
+    def reset_q(self):
+        self.q = self.original_q
 # Defines basic network parameters and functions
 class DQN(nn.Module):
     def __init__(self, input_dim, output_dim,nump):
@@ -102,15 +120,27 @@ class NashNN():
         #self.target_net = copy.deepcopy(self.main_net)
         self.num_sim = 5000
         # Define optimizer used (SGD, etc)
-        self.optimizer = optim.RMSprop(list(self.main_net.main.parameters()) + list(self.main_net.main_V.parameters()),lr=0.01)
+        self.optimizer = optim.RMSprop(list(self.main_net.main.parameters()) + list(self.main_net.main_V.parameters()),lr=0.005)
         # Define loss function (Mean-squared, etc)
         self.criterion = nn.MSELoss()
         self.counter = 0
         
         # Predicts resultant values, input a State object, outputs a FittedValues object
-    def predict(self, input):
-        a,b = self.main_net.forward(self.stateTransform(input))
-        return self.tensorTransform(a,b)
+    def predict(self, state):
+        mu = []
+        #first_output = False
+        for i in range(0,num_players):
+            state.permute(i)
+            #print(state.q)
+            a,b = self.main_net.forward(self.stateTransform(state))
+            output = self.tensorTransform(a,b)
+            mu.append(output.mu)
+            if i == 0:
+                first_output = output
+            state.reset_q()
+            #print(state.q)
+        
+        return NashFittedValues(first_output,torch.stack(mu))
     
 #    def predict_targetNet(self, input):
 #        a,b = self.target_net.forward(self.stateTransform(input))
@@ -162,7 +192,7 @@ class NashNN():
         
     def updateLearningRate(self):
         self.counter += 1
-        self.optimizer = optim.RMSprop(list(self.main_net.main.parameters()) + list(self.main_net.main_V.parameters()),lr=0.01-(0.01-0.003)*self.counter/self.num_sim)
+        self.optimizer = optim.RMSprop(list(self.main_net.main.parameters()) + list(self.main_net.main_V.parameters()),lr=0.005-(0.005-0.001)*self.counter/self.num_sim)
     
 #    #ignore these functions for now... was trying to do batch predictions 
 #    def predict_batch(self, input):
@@ -220,14 +250,14 @@ if __name__ == '__main__':
     num_players = 2
     T = 2
     #replay_stepnum = 3
-    batch_update_size = 200
+    batch_update_size = 100
     num_sim = 5000
     max_action = 20
     update_net = 50
-    buffersize = 300
+    buffersize = 400
     
     #number of parameters that need to be estimated by the network
-    parameter_number = 3*num_players +3
+    parameter_number = 2*num_players +4
     
     #network object
     net = NashNN(2+num_players,parameter_number,num_players,T)
@@ -275,7 +305,7 @@ if __name__ == '__main__':
         epsilon = ep - (ep-0.05)*(k/(num_sim-1))
         total_l = 0
         
-        if k%50 == 0:
+        if k%20 == 0:
             print("Starting Inventory: ", sim.get_state()[0][0])
             flag = True
             
@@ -418,7 +448,7 @@ if __name__ == '__main__':
             
             if (flag):
                 curVal = net.predict(current_state)
-                print("Transition: ",current_state.p,a,current_state.q)
+                print("Transition: ",current_state.p,current_state.q,a,new_state.q)
                 print("Predicted Nash Action: ", curVal.mu.data.numpy())
                 print(cur_loss)
 
