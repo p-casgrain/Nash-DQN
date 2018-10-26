@@ -2,6 +2,61 @@ import torch
 import torch.nn as nn
 
 
+class DQN(nn.Module):
+    def __init__(self, input_dim, output_dim, nump):
+        super(DQN, self).__init__()
+        self.num_players = nump
+        # Define basic fully connected network for parameters in Advantage function
+        self.main = nn.Sequential(
+            nn.Linear(input_dim, 20),
+            nn.ReLU(),
+            nn.Linear(20, 60),
+            nn.ReLU(),
+            nn.Linear(60, 160),
+            nn.ReLU(),
+            nn.Linear(160, 60),
+            nn.ReLU(),
+            nn.Linear(60, output_dim)
+        )
+
+        # Define basic fully connected network for estimating nash value of each state
+        self.main_V = nn.Sequential(
+            nn.Linear(input_dim, 20),
+            nn.ReLU(),
+            nn.Linear(20, 40),
+            nn.ReLU(),
+            nn.Linear(40, 20),
+            nn.ReLU(),
+            nn.Linear(20, self.num_players)
+        )
+
+    # Since only single network, forward prop is simple evaluation of network
+    def forward(self, input):
+        return self.main(input), self.main_V(input)
+
+class DQN2(nn.Module):
+    def __init__(self, input_dim, output_dim):
+        super(DQN2, self).__init__()
+
+        # Define basic fully connected network for parameters in Advantage function
+        self.main = nn.Sequential(
+            nn.Linear(input_dim, 20),
+            nn.ReLU(),
+            nn.Linear(20, 60),
+            nn.ReLU(),
+            nn.Linear(60, 160),
+            nn.ReLU(),
+            nn.Linear(160, 60),
+            nn.ReLU(),
+            nn.Linear(60, output_dim)
+        )
+
+    # Since only single network, forward prop is simple evaluation of network
+    def forward(self, input):
+        return self.main(input)
+
+
+
 class PermInvariantQNN(torch.nn.Module):
     block_size: int
     in_invar_dim: int
@@ -56,3 +111,4 @@ class PermInvariantQNN(torch.nn.Module):
         out_tensor = self.decoder_net(cat_input)
 
         return out_tensor
+
