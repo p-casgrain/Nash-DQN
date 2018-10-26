@@ -32,7 +32,6 @@ class FittedValues(object):
 
         self.P3 = value_vector[1]
 
-
 class NashNN():
     def __init__(self, input_dim, output_dim, nump, t):
         self.num_players = nump
@@ -113,7 +112,6 @@ class NashNN():
         self.counter += 1
         self.optimizer = optim.RMSprop(list(self.main_net.main.parameters()) + list(self.main_net.main_V.parameters()),
                                        lr=0.01 - (0.01 - 0.003) * self.counter / self.num_sim)
-
 
 class NashNN2:
     def __init__(self, num_players=2, control_size=1, state_size=2):
