@@ -9,6 +9,40 @@ from per.prioritized_memory import *
 Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward'))
 
+# class State(object):
+#     """
+#     State Object
+#     Represents the State of an entire game
+#     """
+#     def __init__(self, t, q, p):
+#         self.t , self.q, self.p = t, q, p
+#
+#     def getNormalizedState(self):
+#         """
+#         Returned Normalized State Values
+#         :return: Array of concatenated values
+#         """
+#         norm_q = self.q / 10
+#         norm_p = (self.p - 10) / 10
+#         norm_t = self.t / 4 - 1
+#
+#         return np.array(np.append(np.append(norm_q, norm_p), norm_t))
+#
+
+State = namedtuple('State', ('t', 'q', 'p'))
+
+class State(State):
+    def getNormalizedState(self):
+        """
+        Returned Normalized State Values
+        :return: Array of concatenated values
+        """
+        norm_q = self.q / 10
+        norm_p = (self.p - 10) / 10
+        norm_t = self.t / 4 - 1
+
+        return np.array(np.append(np.append(norm_q, norm_p), norm_t))
+
 
 class MarketSimulator(object):
     def __init__(self, param_dict):
@@ -95,24 +129,8 @@ class MarketSimulator(object):
         return Transition(last_state, nu, (self.Q, self.S), self.last_reward)
 
     def get_state(self):
-        return (self.Q, self.S), self.last_reward, self.total_reward
+        return State(self.t, self.Q, self.S), self.last_reward, self.total_reward
 
-class State(object):
-    def __init__(self, param_dict):
-        self.t = param_dict['time_step']
-        self.q = param_dict['current_inventory']
-        self.p = param_dict['current_price']
-
-    # Returns list representation of all state variables normalized to be [-1,1]
-    # Not done yet
-    def getNormalizedState(self):
-        norm_q = self.q / 10
-        norm_p = (self.p - 10) / 10
-        norm_t = self.t / 4 - 1
-        return np.array(np.append(np.append(norm_q, norm_p), norm_t))
-
-    def print_state(self):
-        print("t =", self.t, "q = ", self.q, "p = ", self.p)
 
 class ExperienceReplay:
     # each experience is a list of with each tuple having:
