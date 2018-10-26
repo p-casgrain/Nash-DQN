@@ -1,12 +1,19 @@
 import torch
 import torch.nn as nn
+import torch.optim as optim
+from nashRL_netlib import *
 
 
 # Define object for estimated elements via NN
 # ***NOTE*** All elements are tensors
 class FittedValues(object):
-    # Initialized via a single numpy vector
     def __init__(self, value_vector, v_value, num_players):
+        """
+
+        :param value_vector:
+        :param v_value:
+        :param num_players:
+        """
         self.num_players = num_players  # number of players in game
 
         self.V = v_value  # nash value vector
@@ -25,63 +32,34 @@ class FittedValues(object):
 
         self.P3 = value_vector[1]
 
-# Defines basic network parameters and functions
-class DQN(nn.Module):
-    def __init__(self, input_dim, output_dim, nump):
-        super(DQN, self).__init__()
-        self.num_players = nump
-        # Define basic fully connected network for parameters in Advantage function
-        self.main = nn.Sequential(
-            nn.Linear(input_dim, 20),
-            nn.ReLU(),
-            nn.Linear(20, 60),
-            nn.ReLU(),
-            nn.Linear(60, 160),
-            nn.ReLU(),
-            nn.Linear(160, 60),
-            nn.ReLU(),
-            nn.Linear(60, output_dim)
-        )
-
-        # Define basic fully connected network for estimating nash value of each state
-        self.main_V = nn.Sequential(
-            nn.Linear(input_dim, 20),
-            nn.ReLU(),
-            nn.Linear(20, 40),
-            nn.ReLU(),
-            nn.Linear(40, 20),
-            nn.ReLU(),
-            nn.Linear(20, num_players)
-        )
-
-    # Since only single network, forward prop is simple evaluation of network
-    def forward(self, input):
-        return self.main(input), self.main_V(input)
-
 
 class NashNN():
-    def __init__(self, input_dim, output_dim, nump):
+    def __init__(self, input_dim, output_dim, nump, t):
         self.num_players = nump
-
-        self.main_net = DQN(input_dim, output_dim, num_players)
-        self.target_net = copy.deepcopy(self.main_net)
-        self.num_sim = 10000
+        self.T = t
+        self.main_net = DQN(input_dim, output_dim, self.num_players)
+        # self.target_net = copy.deepcopy(self.main_net)
+        self.num_sim = 5000
         # Define optimizer used (SGD, etc)
         self.optimizer = optim.RMSprop(list(self.main_net.main.parameters()) + list(self.main_net.main_V.parameters()),
-                                       lr=0.001)
+                                       lr=0.01)
         # Define loss function (Mean-squared, etc)
         self.criterion = nn.MSELoss()
         self.counter = 0
 
         # Predicts resultant values, input a State object, outputs a FittedValues object
 
+    def slice(self,X,i):
+        "Return all items in array except for i^th item"
+        return torch.cat([X[0:i], X[i + 1:]])
+
     def predict(self, input):
         a, b = self.main_net.forward(self.stateTransform(input))
         return self.tensorTransform(a, b)
 
-    def predict_targetNet(self, input):
-        a, b = self.target_net.forward(self.stateTransform(input))
-        return self.tensorTransform(a, b)
+    #    def predict_targetNet(self, input):
+    #        a,b = self.target_net.forward(self.stateTransform(input))
+    #        return self.tensorTransform(a,b)
 
     # Transforms state object into tensor
     def stateTransform(self, s):
@@ -93,36 +71,77 @@ class NashNN():
 
     # takes a tuple of transitions and outputs loss
     def compute_Loss(self, state_tuple):
-        currentState, action, nextState, reward = state_tuple[0], torch.tensor(state_tuple[1]).float(), state_tuple[2], \
-                                                  state_tuple[3]
-        A = lambda u, uNeg, mu, muNeg, a, v, c1, c2, c3: v - 0.5 * c1 * (u - mu) ** 2 + c2 * (u - a) * torch.sum(
-            uNeg - muNeg) + c3 * (uNeg - muNeg) ** 2
+        currentState, action, nextState, reward, isNash = state_tuple[0], torch.tensor(state_tuple[1]).float(), \
+                                                          state_tuple[2], state_tuple[3], state_tuple[4]
+        # Q = lambda u, uNeg, mu, muNeg, a, v, c1, c2, c3: v - 0.5*c1*(u-mu)**2 + c2*(u -a)*torch.sum(uNeg - muNeg) + c3*(uNeg - muNeg)**2
         nextVal = self.predict(nextState).V
+        flag = 0
+
+        # set next nash value to be 0 if last time step
+        if nextState.t > self.T - 1:
+            flag = 1
+
         curVal = self.predict(currentState)
         loss = []
+
         for i in range(0, self.num_players):
             r = lambda T: torch.cat([T[0:i], T[i + 1:]])
-            loss.append(
-                nextVal[i] + reward[i] - A(action[i], r(action), curVal.mu[i], r(curVal.mu), curVal.a[i], curVal.V[i],
-                                           curVal.P1, curVal.P2, curVal.P3))
+            A = lambda u, uNeg, mu, muNeg, a, c1, c2, c3: 0.5 * c1 * (u - mu) ** 2 + c2 * (u - a) * torch.sum(
+                uNeg - muNeg) + c3 * (uNeg - muNeg) ** 2
+            loss.append((1 - flag) * nextVal[i] + flag * nextState.q[i] * (nextState.p - 50 * nextState.q[i])
+                        + reward[i]
+                        + A(action[i], r(action), curVal.mu[i], r(curVal.mu), curVal.a[i], curVal.P1, curVal.P2,
+                            curVal.P3)
+                        - curVal.V[i])
+
+        #        if all(isNash):
+        #            for i in range(0,self.num_players):
+        #                loss.append(nextVal[i] + reward[i] - curVal.V[i])
+        #        else:
+        #            #note that this assumes that at most one person did not take nash action
+        #            for i in range(0,self.num_players):
+        #                r = lambda T : torch.cat([T[0:i], T[i+1:]])
+        #                if isNash[i]:
+        #                    loss.append(nextVal[i] + reward[i] - curVal.V[i].detach() - curVal.P2*(action[i] -curVal.a[i])*torch.sum(r(action) - r(curVal.mu)) - curVal.P3*(torch.sum(r(action) - r(curVal.mu))**2))
+        #                else:
+        #                    loss.append(nextVal[i] + reward[i] - curVal.V[i].detach() + 0.5*curVal.P1*(action[i]-curVal.mu[i])**2)
+        #                    #A(action[i],r(action),curVal.mu[i],r(curVal.mu),curVal.a[i],curVal.V[i].detach(),curVal.P1,curVal.P2,curVal.P3)
 
         return torch.sum(torch.stack(loss) ** 2)
 
     def updateLearningRate(self):
         self.counter += 1
         self.optimizer = optim.RMSprop(list(self.main_net.main.parameters()) + list(self.main_net.main_V.parameters()),
-                                       lr=0.001 - (0.001 - 0.0005) * self.counter / self.num_sim)
+                                       lr=0.01 - (0.01 - 0.003) * self.counter / self.num_sim)
 
 
-#    #ignore these functions for now... was trying to do batch predictions
-#    def predict_batch(self, input):
-#        return self.tensorsTransform(self.main_net(self.statesTransform(input),batch_size = 3))
-#
-#    # Transforms state object into tensor
-#    def statesTransform(self, s):
-#        print(np.array([st.getNormalizedState() for st in s]))
-#        return Variable(torch.from_numpy(np.array([st.getNormalizedState() for st in s])).float()).view(1, -1)
-#
-#    # Transforms output tensor into FittedValues Object
-#    def tensorsTransform(self, output):
-#        return np.apply_along_axis(FittedValues(),1,output.data.numpy())
+class NashNN2:
+    def __init__(self, num_players=2, control_size=1, state_size=2):
+
+        # Store Relevant Variables
+        self.num_players = num_players
+        self.control_size = control_size
+        self.state_size = state_size
+
+        # Compute Output Size (V + mu + c1 + c2 + c3 + a)
+        self.output_dim = 6
+
+        # Compute Input Size : X = (t,S,Q1,...,QK)
+        self.input_size = self.state_size + self.num_players*self.control_size
+
+        # Initialize DQN
+        self.NNmodel = DQN2(input_dim,output_dim)
+
+        # # Initialize Permutation Invariant NN-Model. Takes arguments (S,t,Q)
+        # self.NNmodel = \
+        #     PermInvariantQNN(self.num_players * self.control_size,
+        #                      2, 3 + self.num_players * 2, block_size=1, num_moments=5)
+
+    def predict_action(self, invar_input, non_invar_input):
+
+        # Assume a tensor of block invar inputs [Q0,...,QN] : ?xN
+
+
+
+        self.NNmodel.forward()
+
