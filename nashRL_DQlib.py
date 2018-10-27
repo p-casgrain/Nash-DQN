@@ -135,11 +135,10 @@ class NashNN2:
         #     PermInvariantQNN(self.num_players * self.control_size,
         #                      2, 3 + self.num_players * 2, block_size=1, num_moments=5)
 
-    def predict_action(self, invar_input, non_invar_input):
-
-        # Assume a tensor of block invar inputs [Q0,...,QN] : ?xN
-
-
-
+    def predict(self, input):
+        """
+        :param input: Tensor of State Vectors, assumed to be in order (t,p,q)
+        :return:
+        """
         self.NNmodel.forward()
 

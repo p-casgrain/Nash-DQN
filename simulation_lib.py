@@ -4,45 +4,38 @@ import random
 from itertools import count
 from per.prioritized_memory import *
 import copy
+from per.SumTree import SumTree
+import torch
 
 # Define Transition Class as Named Tuple
 
-Transition = namedtuple('Transition',
-                        ('state', 'action', 'next_state', 'reward'))
+Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))
 
-# class State(object):
-#     """
-#     State Object
-#     Represents the State of an entire game
-#     """
-#     def __init__(self, t, q, p):
-#         self.t , self.q, self.p = t, q, p
-#
-#     def getNormalizedState(self):
-#         """
-#         Returned Normalized State Values
-#         :return: Array of concatenated values
-#         """
-#         norm_q = self.q / 10
-#         norm_p = (self.p - 10) / 10
-#         norm_t = self.t / 4 - 1
-#
-#         return np.array(np.append(np.append(norm_q, norm_p), norm_t))
-#
-
-State = namedtuple('State', ('t', 'q', 'p'))
+State = namedtuple('State', ('t', 'p', 'q'))
 
 class State(State):
-    def getNormalizedState(self):
+    """
+    Game State Class.
+    __init__ takes arguments (t,p,q)
+    Inherits from namedtuple class
+    """
+
+    def getNormalizedState(self, toTensor=True):
         """
         Returned Normalized State Values
         :return: Array of concatenated values
         """
+
         norm_q = self.q / 10
         norm_p = (self.p - 10) / 10
         norm_t = self.t - 1
 
-        return np.array(np.append(np.append(norm_q, norm_p), norm_t))
+        out = np.concatenate( (np.array([norm_t,norm_p]), norm_q) )
+
+        if toTensor:
+            return out
+        else:
+            return torch.from_numpy(out)
 
 
 class MarketSimulator(object):
@@ -102,7 +95,8 @@ class MarketSimulator(object):
         self.done = False
 
     def step(self, nu):
-        last_state = (self.Q, self.S)
+
+        last_state = State(self.t,self.S,self.Q)
 
         if self.t < self.T:
             # Advance Inventory & Time
@@ -127,10 +121,17 @@ class MarketSimulator(object):
         #            # Update Variables
         #            self.Q = np.zeros(self.N, dtype=np.float32)
 
-        return Transition(last_state, nu, (self.Q, self.S), self.last_reward)
+        return Transition(last_state, nu, State(self.t, self.S, self.Q), self.last_reward)
 
     def get_state(self):
         return State(copy.deepcopy(self.t), copy.deepcopy(self.Q), copy.deepcopy(self.S)), copy.deepcopy(self.last_reward), copy.deepcopy(self.total_reward)
+        return State(self.t, self.S, self.Q), self.last_reward, self.total_reward
+
+    def __str__(self):
+        state, last_reward, total_reward = self.get_state()
+        str = "Simulation -- Last State: {}, \
+        Last Reward: {}, Total Reward: {}".format(state,last_reward,total_reward)
+        return str
 
 
 class ExperienceReplay:
@@ -155,3 +156,53 @@ class ExperienceReplay:
 
     def __len__(self):
         return len(self.buffer)
+
+
+class PrioritizedMemory:  # stored as ( s, a, r, s_ ) in SumTree
+    e = 0.01
+    a = 0.6
+    beta = 0.4
+    beta_increment_per_sampling = 0.001
+
+    def __init__(self, capacity):
+        self.tree = SumTree(capacity)
+        self.capacity = capacity
+
+    def _get_priority(self, error):
+        return (error + self.e) ** self.a
+
+    def add(self, error, sample):
+        p = self._get_priority(error)
+        self.tree.add(p, sample)
+
+    def sample(self, n):
+        batch = []
+        idxs = []
+        segment = self.tree.total() / n
+        priorities = []
+
+        self.beta = np.min([1., self.beta + self.beta_increment_per_sampling])
+
+        for i in range(n):
+            a = segment * i
+            b = segment * (i + 1)
+
+            s = random.uniform(a, b)
+            (idx, p, data) = self.tree.get(s)
+            priorities.append(p)
+            batch.append(data)
+            idxs.append(idx)
+
+        sampling_probabilities = priorities / self.tree.total()
+        is_weight = np.power(self.tree.n_entries * sampling_probabilities, -self.beta)
+        is_weight /= is_weight.max()
+
+        return batch, idxs, is_weight
+
+    def update(self, idx, error):
+        #        p = self._get_priority(error)
+        #        self.tree.update(idx, p)
+
+        for i in range(0, len(idx)):
+            p = self._get_priority(error[i])
+            self.tree.update(idx[i], p)
