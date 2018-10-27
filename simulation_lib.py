@@ -3,6 +3,7 @@ from collections import namedtuple
 import random
 from itertools import count
 from per.prioritized_memory import *
+import copy
 
 # Define Transition Class as Named Tuple
 
@@ -39,7 +40,7 @@ class State(State):
         """
         norm_q = self.q / 10
         norm_p = (self.p - 10) / 10
-        norm_t = self.t / 4 - 1
+        norm_t = self.t - 1
 
         return np.array(np.append(np.append(norm_q, norm_p), norm_t))
 
@@ -129,7 +130,7 @@ class MarketSimulator(object):
         return Transition(last_state, nu, (self.Q, self.S), self.last_reward)
 
     def get_state(self):
-        return State(self.t, self.Q, self.S), self.last_reward, self.total_reward
+        return State(copy.deepcopy(self.t), copy.deepcopy(self.Q), copy.deepcopy(self.S)), copy.deepcopy(self.last_reward), copy.deepcopy(self.total_reward)
 
 
 class ExperienceReplay:
