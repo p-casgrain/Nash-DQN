@@ -19,19 +19,30 @@ class FittedValues(object):
 
         self.V = v_value  # nash value vector
 
-        self.mu = value_vector[0:self.num_players]  # mean of each player
-        value_vector = value_vector[self.num_players:]
-
-        self.P1 = (value_vector[0]) ** 2  # P1 matrix for each player, exp transformation to ensure positive value
+        self.mu = value_vector[0] #mean of current player
         value_vector = value_vector[1:]
-
-        self.a = value_vector[0:self.num_players]  # a of each player
+        
+        self.P1 = (value_vector[0])**2 #P1 matrix for each player, exp transformation to ensure positive value
+        value_vector = value_vector[1:]
+        
+        self.a = value_vector[0:self.num_players] #a of each player
         value_vector = value_vector[self.num_players:]
-
-        # p2 vector
-        self.P2 = value_vector[0]
-
+        
+        #p2 vector
+        self.P2 = value_vector[0] 
+        
         self.P3 = value_vector[1]
+        
+class NashFittedValues(object):
+    # Initialized via a single numpy vector
+    def __init__(self, fittedval, mu_vec):
+        self.num_players = fittedval.num_players #number of players in game
+        self.V = fittedval.V #nash value vector
+        self.a = fittedval.a
+        self.P1 = fittedval.P1
+        self.P2 = fittedval.P2
+        self.P3 = fittedval.P3
+        self.mu = mu_vec
 
 class NashNN():
     def __init__(self, input_dim, output_dim, nump, t):
@@ -53,17 +64,24 @@ class NashNN():
         "Return all items in array except for i^th item"
         return torch.cat([X[0:i], X[i + 1:]])
 
-    def predict(self, input):
-        a, b = self.main_net.forward(self.stateTransform(input))
-        return self.tensorTransform(a, b)
-
-    #    def predict_targetNet(self, input):
-    #        a,b = self.target_net.forward(self.stateTransform(input))
-    #        return self.tensorTransform(a,b)
-
-    # Transforms state object into tensor
-    def stateTransform(self, s):
-        return torch.tensor(s.getNormalizedState()).float()
+    # Predicts resultant values, input a State object, outputs a NashFittedValues object
+    def predict(self, state):
+        mu = [] # list of Nash actions
+        
+        for i in range(0,self.num_players):
+            norm_state = state.getNormalizedState()
+            #Moves the i'th agent's inventory to the front, rest of the list order is preserved
+            norm_state = np.delete(np.insert(norm_state,0,norm_state[i]),i+1)
+            #Evaluate net
+            a,b = self.main_net.forward(torch.tensor(norm_state).float())
+            output = self.tensorTransform(a,b)
+            #Adds i'th agent Nash action 
+            mu.append(output.mu)
+            #For all other estimated variables, take only the first (ie using only natural ordered inventories) agent's predicted values
+            if i == 0:
+                first_output = output
+        
+        return NashFittedValues(first_output,torch.stack(mu))
 
     # Transforms output tensor into FittedValues Object
     def tensorTransform(self, output1, output2):

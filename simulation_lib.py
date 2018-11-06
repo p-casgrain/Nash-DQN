@@ -3,14 +3,21 @@ from collections import namedtuple
 import random
 from itertools import count
 from per.prioritized_memory import *
+<<<<<<< HEAD
 import copy
 from per.SumTree import SumTree
 import torch
+
+=======
 
 import copy
 
 from per.SumTree import SumTree
 import torch
+
+
+
+>>>>>>> 57e3d5515f33013b5ecbf344fa5dbb8ab500ac50
 # Define Transition Class as Named Tuple
 
 Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))
@@ -33,7 +40,10 @@ class State(State):
         norm_q = self.q / 10
         norm_p = (self.p - 10) / 10
         norm_t = self.t - 1
+<<<<<<< HEAD
 
+=======
+>>>>>>> 57e3d5515f33013b5ecbf344fa5dbb8ab500ac50
         out = np.concatenate( (np.array([norm_t,norm_p]), norm_q) )
 
         if toTensor:
@@ -128,10 +138,13 @@ class MarketSimulator(object):
         return Transition(last_state, nu, State(self.t, self.S, self.Q), self.last_reward)
 
     def get_state(self):
+<<<<<<< HEAD
         return State(copy.deepcopy(self.t), copy.deepcopy(self.Q), copy.deepcopy(self.S)), copy.deepcopy(self.last_reward), copy.deepcopy(self.total_reward)
         return State(self.t, self.S, self.Q), self.last_reward, self.total_reward
+=======
         return State(copy.deepcopy(self.t), copy.deepcopy(self.S), copy.deepcopy(self.Q)), copy.deepcopy(self.last_reward), copy.deepcopy(self.total_reward)
 
+>>>>>>> 57e3d5515f33013b5ecbf344fa5dbb8ab500ac50
 
     def __str__(self):
         state, last_reward, total_reward = self.get_state()
