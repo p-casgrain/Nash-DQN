@@ -9,7 +9,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-# import torchvision.transforms as T
+#import torchvision.transforms as T
 
 from simulation_lib import *
 from nashRL_netlib import *
@@ -18,9 +18,8 @@ from nashRL_DQlib import *
 # Set global digit printing options
 np.set_printoptions(precision=4)
 
-
 # Define truncation function
-def trunc_array(a, max_a):
+def trunc_array(a,max_a):
     """
     Truncate a into [-max_a,max_a]
     :param a: array / tensor to truncate
@@ -28,8 +27,7 @@ def trunc_array(a, max_a):
     :return: Truncated Array
     """
     lt, gt = a < -max_a, a > max_a
-    return a * (1 - lt - gt) - lt * max_a + gt * max_a
-
+    return a * (1 - lt - gt) - lt * max_a + gt*max_a
 
 # Define Market Game Simulation Object
 if __name__ == '__main__':
@@ -37,54 +35,56 @@ if __name__ == '__main__':
     # Define Training and Model Parameters
     num_players = 2
     T = 2
-    # replay_stepnum = 3
+    
+    #number of parameters that need to be estimated by the network
+    parameter_number = 2*num_players +4
     batch_update_size = 200
-    num_sim = 50
+    num_sim = 5000
     max_action = 20
     update_net = 50
     buffersize = 300
 
     # Random Action Probability
     eps = 0.5
-
+    
     # Set number of output variables needed from net:
-    # Supposed to be = 1 x ( V + mu + c1 + c2 + c3 + a). Note: Need to make more robust
+    # Supposed to be = 1 x ( V + c1 + c2 + c3 + mu + a). Note: Need to make more robust
     parameter_number = 3 * num_players + 3
     # parameter_number = 6
-
+    
     # Initialize NashNN Agents
-    nash_agent = NashNN(2 + num_players, parameter_number, num_players, T)
-
+    nash_agent = NashNN(2+num_players,parameter_number,num_players,T)
+    
     # Package Simulation Parameters
     sim_dict = {'price_impact': 0.5,
-                'transaction_cost': 1,
-                'liquidation_cost': 100,
-                'running_penalty': 0,
-                'T': T,
-                'dt': 1,
-                'N_agents': num_players,
-                'drift_function': (lambda x, y: 0),
-                'volatility': 0.01}
-
-    # Initialize Simulator
+                'transaction_cost':1,
+                'liquidation_cost':100,
+                'running_penalty':0,
+                'T':T,
+                'dt':1,
+                'N_agents':num_players,
+                'drift_function':(lambda x,y: 0) ,
+                'volatility':0.01}
     sim = MarketSimulator(sim_dict)
-
-    # Initialize storage variables
+    
+    #Initialize storage variables
     prices = np.zeros(T)
-    Qs = np.zeros((T, num_players))
-    Actions = np.zeros((T, num_players))
-    rewards = np.zeros((T, num_players))
-
+    Qs = np.zeros((T,num_players))
+    Actions = np.zeros((T,num_players))
+    rewards = np.zeros((T,num_players))
+    
     current_state = sim.get_state()[0]
 
     all_states = []
     states = []
-
+    
     all_predicts = []
     preds = []
+    
+    #exploration chance
+    ep = 0.5
 
-    # Intialize replay memory
-    # replay = PrioritizedMemory(buffersize)
+    # Intialize relay memory
     replay = ExperienceReplay(buffersize)
 
     sum_loss = np.zeros(num_sim)
@@ -107,38 +107,13 @@ if __name__ == '__main__':
             #### Begin Action Generation Block ####
             ## Note to self: Will need to take deeper look
 
-            if i == T - 1:
-                if np.random.random() < eps:
-                    # random action between buying/selling 20 shares for all players
-                    a = nash_agent.predict(current_state).mu.data.numpy()
-                    a = a + np.random.normal(0, 2.5, num_players)
-                    #                    rand_player = np.random.randint(0,num_players)
-                    #                    a[rand_player] = np.random.rand()*40-20
-                    isNash = [True] * num_players
-                #                    isNash[rand_player] = False
-                else:
-                    # else take predicted nash action
-                    a = nash_agent.predict(current_state).mu.data.numpy()
-                    isNash = [True] * num_players
-                # a = -current_state.q
-                # isNash = [True] * num_players
-                # print (nash_agent.predict(current_state).V.data.numpy())
+            if np.random.random() < eps:
+                #random action between buying/selling 20 shares for all players
+                a = nash_agent.predict(current_state).mu.data.numpy()
+                a = a + np.random.normal(0, 2.5, num_players)
             else:
-                if np.random.random() < eps:
-                    # random action between buying/selling 20 shares for all players
-                    a = nash_agent.predict(current_state).mu.data.numpy()
-                    a = a + np.random.normal(0, 2.5, num_players)
-                    #                    rand_player = np.random.randint(0,num_players)
-                    #                    a[rand_player] = np.random.rand()*40-20
-                    isNash = [True] * num_players
-                #                    isNash[rand_player] = False
-                else:
-                    # else take predicted nash action
-                    a = nash_agent.predict(current_state).mu.data.numpy()
-                    isNash = [True] * num_players
-                    # print(a)
-
-                a = trunc_array(a, max_action)
+                #else take predicted nash action
+                a = nash_agent.predict(current_state).mu.data.numpy()
 
             #### End Action Generation Block ####
 
