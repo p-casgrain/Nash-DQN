@@ -115,22 +115,25 @@ if __name__ == '__main__':
                 #else take predicted nash action
                 a = nash_agent.predict(current_state).mu.data.numpy()
 
-            #### End Action Generation Block ####
+            a = trunc_array(a, max_action)
 
+            #### End Action Generation Block ####
+            
             # Take Chosen Actions and Take Step
-            sim.step(a)
+            experience = sim.step(a)
             new_state, lr, tr = sim.get_state()
+            new_state,lr,tr = sim.get_state()
 
             # updates storage variables
             states.append(new_state)
             prices[i] = new_state.p
-            Qs[i, :] = new_state.q
-            Actions[i, :] = a
+            Qs[i,:] = new_state.q
+            Actions[i,:] = a
             rewards[i] = lr
             # preds.append[nash_agent.predict(current_state).V.data()]
 
             # creates experience element
-            experience = (current_state, a, new_state, lr, isNash)
+            # experience = (current_state, a, new_state, lr, isNash)
             # computes loss on new experience
             new_loss = nash_agent.compute_Loss(experience).data.numpy()
 
@@ -165,8 +168,9 @@ if __name__ == '__main__':
 
             if (print_flag):
                 curVal = nash_agent.predict(current_state)
-                print("{} , Action: {}, Loss: {}". \
-                      format(current_state, curVal.mu.data.numpy(), cur_loss))
+                print("{} , Action: {}, Loss: {}".\
+                      format( current_state, curVal.mu.data.numpy(), cur_loss ) )
+
 
         # defines loss per period
         sum_loss[k] = total_l
