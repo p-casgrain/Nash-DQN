@@ -7,6 +7,10 @@ import copy
 from per.SumTree import SumTree
 import torch
 
+import copy
+
+from per.SumTree import SumTree
+import torch
 # Define Transition Class as Named Tuple
 
 Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))
@@ -126,6 +130,8 @@ class MarketSimulator(object):
     def get_state(self):
         return State(copy.deepcopy(self.t), copy.deepcopy(self.Q), copy.deepcopy(self.S)), copy.deepcopy(self.last_reward), copy.deepcopy(self.total_reward)
         return State(self.t, self.S, self.Q), self.last_reward, self.total_reward
+        return State(copy.deepcopy(self.t), copy.deepcopy(self.S), copy.deepcopy(self.Q)), copy.deepcopy(self.last_reward), copy.deepcopy(self.total_reward)
+
 
     def __str__(self):
         state, last_reward, total_reward = self.get_state()
