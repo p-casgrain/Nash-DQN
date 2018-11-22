@@ -189,7 +189,7 @@ if __name__ == '__main__':
             total_l += cur_loss
 
             if (print_flag):
-                curVal = nash_agent.predict(current_state)
+                curVal = nash_agent.predict_print(current_state)
                 print("{} , Action: {}, Loss: {}".\
                       format( current_state, curVal.mu.data.numpy(), cur_loss ) )
 

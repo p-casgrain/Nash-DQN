@@ -33,7 +33,7 @@ class State(State):
         norm_q = self.q / 10
         norm_p = (self.p - 10) / 10
         norm_t = self.t - 1
-        out = np.concatenate( (np.array([norm_t,norm_p]), norm_q) )
+        out = copy.deepcopy(np.concatenate( (np.array([norm_t,norm_p]), norm_q) ))
 
         if toTensor:
             return out

@@ -33,6 +33,38 @@ class DQN(nn.Module):
     # Since only single network, forward prop is simple evaluation of network
     def forward(self, input):
         return self.main(input), self.main_V(input)
+    
+class DQN3(nn.Module):
+    def __init__(self, input_dim, output_dim, nump):
+        super(DQN3, self).__init__()
+        self.num_players = nump
+        # Define basic fully connected network for parameters in Advantage function
+        self.main = nn.Sequential(
+            nn.Linear(input_dim, 20),
+            nn.ReLU(),
+            nn.Linear(20, 60),
+            nn.ReLU(),
+            nn.Linear(60, 160),
+            nn.ReLU(),
+            nn.Linear(160, 60),
+            nn.ReLU(),
+            nn.Linear(60, output_dim)
+        )
+
+        # Define basic fully connected network for estimating nash value of each state
+        self.main_V = nn.Sequential(
+            nn.Linear(input_dim, 20),
+            nn.ReLU(),
+            nn.Linear(20, 40),
+            nn.ReLU(),
+            nn.Linear(40, 20),
+            nn.ReLU(),
+            nn.Linear(20, 1)
+        )
+
+    # Since only single network, forward prop is simple evaluation of network
+    def forward(self, input):
+        return self.main(input), self.main_V(input)
 
 class DQN2(nn.Module):
     def __init__(self, input_dim, output_dim):

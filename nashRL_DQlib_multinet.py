@@ -17,7 +17,7 @@ class FittedValues(object):
         """
         self.num_players = num_players  # number of players in game
 
-        self.V = v_value  # nash value vector
+        self.V = v_value[0]  # nash value vector of current player
 
         self.mu = value_vector[0] #mean of current player
         value_vector = value_vector[1:]
@@ -25,8 +25,8 @@ class FittedValues(object):
         self.P1 = (value_vector[0])**2 #P1 matrix for each player, exp transformation to ensure positive value
         value_vector = value_vector[1:]
         
-        self.a = value_vector[0:self.num_players] #a of each player
-        value_vector = value_vector[self.num_players:]
+        self.a = value_vector[0] #a of current player
+        value_vector = value_vector[1:]
         
         #p2 vector
         self.P2 = value_vector[0] 
@@ -35,25 +35,40 @@ class FittedValues(object):
         
 class NashFittedValues(object):
     # Initialized via a single numpy vector
-    def __init__(self, fittedval, mu_vec):
-        self.num_players = fittedval.num_players #number of players in game
-        self.V = fittedval.V #nash value vector
-        self.a = fittedval.a
-        self.P1 = fittedval.P1
-        self.P2 = fittedval.P2
-        self.P3 = fittedval.P3
-        self.mu = mu_vec
+    def __init__(self, FV_list):
+        self.num_players = FV_list[0].num_players #number of players in game
+        self.V = [] #vector of all agents
+        self.a = [] #vector of all agents
+        self.P1 = []
+        self.P2 = []
+        self.P3 = []
+        self.mu = []
+        
+        for item in FV_list:
+            self.V.append(item.V)
+            self.a.append(item.a)
+            self.P1.append(item.P1)
+            self.P2.append(item.P2)
+            self.P3.append(item.P3)
+            self.mu.append(item.mu)
+        
+        self.V = torch.stack(self.V)
+        self.a = torch.stack(self.a)
+        self.P1 = torch.stack(self.P1)
+        self.P2 = torch.stack(self.P2)
+        self.P3 = torch.stack(self.P3)
+        self.mu = torch.stack(self.mu)
 
 class NashNN():
     def __init__(self, input_dim, output_dim, nump, t):
         self.num_players = nump
         self.T = t
-        self.main_net = DQN(input_dim, output_dim, self.num_players)
+        self.main_net = DQN3(input_dim, output_dim, self.num_players)
         # self.target_net = copy.deepcopy(self.main_net)
         self.num_sim = 5000
         # Define optimizer used (SGD, etc)
         self.optimizer = optim.RMSprop(list(self.main_net.main.parameters()) + list(self.main_net.main_V.parameters()),
-                                       lr=0.01)
+                                       lr=0.005)
         # Define loss function (Mean-squared, etc)
         self.criterion = nn.MSELoss()
         self.counter = 0
@@ -66,7 +81,7 @@ class NashNN():
 
     # Predicts resultant values, input a State object, outputs a NashFittedValues object
     def predict(self, state):
-        mu = [] # list of Nash actions
+        FV_list = [] # list of Nash actions
         
         for i in range(0,self.num_players):
             norm_state = state.getNormalizedState()
@@ -77,16 +92,13 @@ class NashNN():
             a,b = self.main_net.forward(torch.tensor(norm_state).float())
             output = self.tensorTransform(a,b)
             #Adds i'th agent Nash action 
-            mu.append(output.mu)
-            #For all other estimated variables, take only the first (ie using only natural ordered inventories) agent's predicted values
-            if i == 0:
-                first_output = output
+            FV_list.append(output)
         
         
-        return NashFittedValues(first_output,torch.stack(mu))
+        return NashFittedValues(FV_list)
     
     def predict_print(self, state):
-        mu = [] # list of Nash actions
+        FV_list = [] # list of Nash actions
         
         for i in range(0,self.num_players):
             norm_state = state.getNormalizedState()
@@ -98,17 +110,13 @@ class NashNN():
             a,b = self.main_net.forward(torch.tensor(norm_state).float())
             output = self.tensorTransform(a,b)
             #Adds i'th agent Nash action 
-            mu.append(output.mu)
-            #For all other estimated variables, take only the first (ie using only natural ordered inventories) agent's predicted values
-            if i == 0:
-                first_output = output
-                
-            print(output.mu.data.numpy(),output.V.data.numpy())
+            FV_list.append(output)
             
-        print("")
-        
-        
-        return NashFittedValues(first_output,torch.stack(mu))
+            
+        out = NashFittedValues(FV_list)
+        print(out.V.data.numpy(),out.mu.data.numpy(),out.a.data.numpy(),out.P1.data.numpy(),out.P2.data.numpy(),out.P3.data.numpy())
+        print("")  
+        return out
 
     # Transforms output tensor into FittedValues Object
     def tensorTransform(self, output1, output2):
@@ -121,7 +129,9 @@ class NashNN():
         # Q = lambda u, uNeg, mu, muNeg, a, v, c1, c2, c3: v - 0.5*c1*(u-mu)**2 + c2*(u -a)*torch.sum(uNeg - muNeg) + c3*(uNeg - muNeg)**2
         nextVal = self.predict(nextState).V
         flag = 0
-
+        
+        penalty = 50
+        
         # set next nash value to be 0 if last time step
         if nextState.t > self.T - 1:
             flag = 1
@@ -133,11 +143,14 @@ class NashNN():
             r = lambda T: torch.cat([T[0:i], T[i + 1:]])
             A = lambda u, uNeg, mu, muNeg, a, c1, c2, c3: 0.5 * c1 * (u - mu) ** 2 + c2 * (u - a) * torch.sum(
                 uNeg - muNeg) + c3 * (uNeg - muNeg) ** 2
-            loss.append((1 - flag) * nextVal[i] + flag * nextState.q[i] * (nextState.p - 50 * nextState.q[i])
+            loss.append(((1 - flag) * nextVal[i] + flag * nextState.q[i] * (nextState.p - 50 * nextState.q[i])
                         + reward[i]
-                        + A(action[i], r(action), curVal.mu[i], r(curVal.mu), curVal.a[i], curVal.P1, curVal.P2,
-                            curVal.P3)
-                        - curVal.V[i])
+                        + A(action[i], r(action), curVal.mu[i], r(curVal.mu), curVal.a[i], curVal.P1[i], curVal.P2[i],
+                            curVal.P3[i])
+                        - curVal.V[i])**2 
+                        + penalty*(curVal.P1[0]-curVal.P1[1])**2
+                        + penalty*(curVal.P2[0]-curVal.P2[1])**2
+                        + penalty*(curVal.P3[0]-curVal.P3[1])**2)
 
         #        if all(isNash):
         #            for i in range(0,self.num_players):
@@ -152,7 +165,7 @@ class NashNN():
         #                    loss.append(nextVal[i] + reward[i] - curVal.V[i].detach() + 0.5*curVal.P1*(action[i]-curVal.mu[i])**2)
         #                    #A(action[i],r(action),curVal.mu[i],r(curVal.mu),curVal.a[i],curVal.V[i].detach(),curVal.P1,curVal.P2,curVal.P3)
 
-        return torch.sum(torch.stack(loss) ** 2)
+        return torch.sum(torch.stack(loss))
 
     def updateLearningRate(self):
         self.counter += 1
