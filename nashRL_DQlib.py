@@ -117,6 +117,7 @@ class NashNN():
     # takes a tuple of transitions and outputs loss
     def compute_Loss(self, state_tuple):
         currentState, action, nextState, reward = state_tuple[0], torch.tensor(state_tuple[1]).float(), \
+                                                  state_tuple[2], state_tuple[3]
                                                           state_tuple[2], state_tuple[3]
         # Q = lambda u, uNeg, mu, muNeg, a, v, c1, c2, c3: v - 0.5*c1*(u-mu)**2 + c2*(u -a)*torch.sum(uNeg - muNeg) + c3*(uNeg - muNeg)**2
         nextVal = self.predict(nextState).V

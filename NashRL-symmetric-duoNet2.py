@@ -14,10 +14,6 @@ import torch.nn.functional as F
 from simulation_lib import *
 from nashRL_netlib import *
 from nashRL_DQlib import *
-# -------------------------------------------------------------------
-# This file defines some of the necessary objects and classes needed
-# for the LQ-Nash Reinforcement Learning Algorithm
-# -------------------------------------------------------------------
 
 # Set global digit printing options
 np.set_printoptions(precision=4)
@@ -93,35 +89,21 @@ if __name__ == '__main__':
 
     sum_loss = np.zeros(num_sim)
     total_l = 0
-    
-    for k in range (0,num_sim):
 
+    for k in range(0, num_sim):
 
-        eps = max( eps - (eps-0.05)*(k/(num_sim-1)), 0 )
-        total_l = 0        
-#        if k%20 == 0:
-#            print("Starting Inventory: ", sim.get_state()[0][0])
-#            flag = True
-            
-#        if k%update_net == 0:
-#                net.target_net = copy.deepcopy(net.main_net)
-            
-        for i in range(0,T):   
-            current_state,lr,tr = sim.get_state()
-            #print("funny state:", state[0])
-#            state_dict = {'time_step':i,
-#                          'current_inventory':np.copy(state[0]),
-#                          'current_price':state[1]}
-#            current_state = State(state_dict)
+        # Update Exploration Probability and Total Loss
+        eps = max(eps - (eps - 0.05) * (k / (num_sim - 1)), 0)
+        total_l = 0
 
-        print_flag = not k % 20
+        # Set print flag and print initial sim values
+        print_flag = not k % 50
+        if print_flag: print("Simulation #{}:\n{}".format(k, sim.get_state()[0]))
 
-        if print_flag : print("New Simulation: \n", sim.get_state()[0])
+        for i in range(0, T):
 
-        for i in range(0,T):
+            current_state, lr, tr = sim.get_state()
 
-            current_state,lr,tr = sim.get_state()
-            
             #### Begin Action Generation Block ####
             ## Note to self: Will need to take deeper look
 
@@ -138,23 +120,23 @@ if __name__ == '__main__':
             #### End Action Generation Block ####
             
             # Take Chosen Actions and Take Step
-            sim.step(a)
+            experience = sim.step(a)
+            new_state, lr, tr = sim.get_state()
             new_state,lr,tr = sim.get_state()
 
-            #updates storage variables
+            # updates storage variables
             states.append(new_state)
             prices[i] = new_state.p
             Qs[i,:] = new_state.q
             Actions[i,:] = a
             rewards[i] = lr
-            #preds.append[nash_agent.predict(current_state).V.data()]
-            
-            #creates experience element
-            experience = (current_state,a,new_state,lr)
-            #computes loss on new experience
+            # preds.append[nash_agent.predict(current_state).V.data()]
+
+            # creates experience element
+            # experience = (current_state, a, new_state, lr, isNash)
+            # computes loss on new experience
             new_loss = nash_agent.compute_Loss(experience).data.numpy()
 
-        
             # Append Transition to replay memory
             replay.add(experience)
             # replay.add(new_loss,experience)
@@ -163,28 +145,24 @@ if __name__ == '__main__':
             replay_sample = replay.sample(batch_update_size)
             # replay_sample, index, weights = replay.sample(batch_update_size)
 
-            
-            
             loss = []
-            #defined new list for replay - can delete and switch to loss later
+            # defined new list for replay - can delete and switch to loss later
             pro_loss = []
-            
-            for sample in replay_sample: 
+
+            for sample in replay_sample:
                 cur_loss = nash_agent.compute_Loss(sample)
                 loss.append(cur_loss)
                 pro_loss.append(cur_loss.data.numpy().item())
-                
 
             loss = torch.sum(torch.stack(loss))
-            
+
             nash_agent.optimizer.zero_grad()
             loss.backward()
             nash_agent.optimizer.step()
-            
+
             # Update priority replay
             # replay.update(index,pro_loss)
 
-            
             cur_loss = nash_agent.compute_Loss(experience).data.numpy()
             total_l += cur_loss
 
@@ -194,16 +172,14 @@ if __name__ == '__main__':
                       format( current_state, curVal.mu.data.numpy(), cur_loss ) )
 
 
-                
-        #defines loss per period
+        # defines loss per period
         sum_loss[k] = total_l
 
-        #resets simulation
+        # resets simulation
         sim.reset()
         all_states.append(states)
         all_predicts.append(preds)
         nash_agent.updateLearningRate()
-        
+
+
     plt.plot(sum_loss)
-        
-    
