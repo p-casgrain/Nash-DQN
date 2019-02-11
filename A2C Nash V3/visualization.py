@@ -8,9 +8,9 @@ from NashRL import *
 from nashRL_netlib import *
 from nashRL_DQlib_multinet import *
 
-
+#Creates a Mesh with Inventory on Y-axis, Time on X-axis at a specified price
 def to_State_mesh(t_list, q_list, p, net):
-    default_inventory = -20
+    default_inventory = 30
     state_list = []
     for q in q_list:
         for t in t_list:
@@ -21,7 +21,8 @@ def to_State_mesh(t_list, q_list, p, net):
     out = mu_list[:,0].view((len(q_list),len(t_list))).data.numpy()
     return out
 
-
+#Creates a series of heatmaps of Inventory x Time, with each subplot
+# representing a separate price point
 def heatmap_old(net, t_step, q_step, p_step, t_range, q_range, p_range):
     counter = 1
     p_list = np.linspace(p_range[0], p_range[1], p_step)

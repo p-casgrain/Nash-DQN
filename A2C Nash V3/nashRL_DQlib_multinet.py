@@ -117,32 +117,6 @@ class NashNN():
         
         return NFV_list
     
-    #-------------------
-    # Outputs the estimated nash action and related coefficients for each agent:
-    # i.e. mu, c1, c2, c3 
-    # in the form of a NashFittedValues Object
-    # *****NOTE: SAME FUNCTION AS ABOVE, ONLY USED FOR DEBUGGING PURPOSES******
-    #-------------------
-#    def predict_action_print(self, state):
-#        expanded_state = self.expand_list(states)
-#
-#        
-#        FV_list = [] # list of Nash actions
-#        
-#        for i in range(0,self.num_players):
-#            norm_state = state.getNormalizedState()
-#            #Moves the i'th agent's inventory to the front, rest of the list order is preserved
-#            norm_state = np.delete(np.insert(norm_state,2,norm_state[i+2]),i+3)
-#            #Evaluate net
-#            output = FittedValues(self.action_net.forward(torch.tensor(norm_state).float()), self.num_players)
-#            #Adds i'th agent Nash action 
-#            FV_list.append(output)
-#            
-#        out = NashFittedValues(FV_list)
-#        print("Nash Actiion: {}, Constant 1: {}, Constant 2: {}, Constant 3: {}" .\
-#              format(out.mu.data.numpy(),out.c1.data.numpy(),out.c2.data.numpy(),out.c3.data.numpy()))
-#        return out
-
     #--------------------
     # Returns the estimated Nash Value of each agent in a list of states
     #--------------------
@@ -166,9 +140,7 @@ class NashNN():
         
         expanded_states = self.expand_list_untransformed(cur_state_list)
         expanded_next_states = self.expand_list_untransformed(next_state_list)
-        #print(np.array(expanded_states))
-        #print(expanded_states[:,1])
-        #print(self.term_costs*np.ones(len(expanded_states)))
+
         term_list = np.array(list(map(lambda p,q,tc: q*p - tc*q**2, expanded_states[:,1],expanded_states[:,2]/2,self.transaction_cost*np.ones(len(expanded_states))))) \
                     + np.array(list(map(lambda p,q,tc: q*p - tc*q**2, expanded_next_states[:,1],expanded_states[:,2]/2,self.transaction_cost*np.ones(len(expanded_states)))))
         nextstate_val = self.predict_value(next_state_list).detach().view(-1).data.numpy()
@@ -177,10 +149,6 @@ class NashNN():
         # Sum of current state's reward + estimated next state's nash value     --- if not last state
         # Reward obtained if agent executes action to net out current inventory --- if last state
         return self.criterion(target, torch.tensor(np.multiply(flag,term_list) + np.multiply(np.ones(len(expanded_states)) - flag, nextstate_val + np.array(reward_list).flatten())).float())
-            
-        # Returns the squared loss with target being:
-        # Sum of current state's reward + estimated next state's nash value     --- if not last state
-        # Reward obtained if agent executes action to net out current inventory --- if last state
         
         
     def compute_value_Loss_print(self,state_tuples):
@@ -196,23 +164,14 @@ class NashNN():
         
         expanded_states = self.expand_list_untransformed(cur_state_list)
         expanded_next_states = self.expand_list_untransformed(next_state_list)
-        #print(np.array(expanded_states))
-        #print(expanded_states[:,1])
-        #print(self.term_costs*np.ones(len(expanded_states)))
         term_list = np.array(list(map(lambda p,q,tc: q*p - tc*q**2, expanded_states[:,1],expanded_states[:,2]/2,self.transaction_cost*np.ones(len(expanded_states))))) \
                     + np.array(list(map(lambda p,q,tc: q*p - tc*q**2, expanded_next_states[:,1],expanded_states[:,2]/2,self.transaction_cost*np.ones(len(expanded_states)))))
-        #print(expanded_states)
-        #print(term_list)
         nextstate_val = self.predict_value(next_state_list).detach().view(-1).data.numpy()
         
         # Returns the squared loss with target being:
         # Sum of current state's reward + estimated next state's nash value     --- if not last state
         # Reward obtained if agent executes action to net out current inventory --- if last state
         return self.criterion(target, torch.tensor(np.multiply(flag,term_list) + np.multiply(np.ones(len(expanded_states)) - flag, nextstate_val + np.array(reward_list).flatten())).float())
-            
-        # Returns the squared loss with target being:
-        # Sum of current state's reward + estimated next state's nash value     --- if not last state
-        # Reward obtained if agent executes action to net out current inventory --- if last state
         
     #--------------------
     # Returns the loss of Action Coefficient estimates at a particular state
@@ -236,6 +195,7 @@ class NashNN():
         curVal = self.predict_value(cur_state_list).detach().view(-1)      # Nash Value of Current state
         nextVal = self.predict_value(next_state_list).detach().view(-1).data.numpy()    # Nash Value of Next state
         
+        #Makes Matrix of Terminal Values
         expanded_next_states = self.expand_list_untransformed(next_state_list)
         term_list = np.array(list(map(lambda p,q,tc: q*p - tc*q**2, expanded_next_states[:,1],expanded_next_states[:,2],self.term_costs*np.ones(len(expanded_next_states)))))
         
@@ -244,14 +204,17 @@ class NashNN():
         c2_list = torch.stack([nfv.c2 for nfv in curAct]).view(-1)
         c3_list = torch.stack([nfv.c3 for nfv in curAct]).view(-1)
         mu_list = torch.stack([nfv.mu for nfv in curAct])
+        
+        #Creates the Mu_neg and u_Neg Matrices
         uNeg_list = torch.tensor(self.matrix_slice(action_list)).float()
         muNeg_list = self.matrix_slice(mu_list)
         act_list = torch.tensor(action_list.view(-1)).float()
         mu_list = mu_list.view(-1)
 
+        #Computes the Advantage Function using matrix operations
         A = - c1_list * (act_list-mu_list)**2 / 2 - c2_list * (act_list-mu_list) * torch.sum(uNeg_list - muNeg_list,
                         dim = 1) - c3_list * torch.sum((uNeg_list - muNeg_list)**2,dim = 1) / 2
-        #print(np.multiply(flag, term_list))
+
         return torch.sum((torch.tensor(np.multiply(np.ones(len(curVal))-flag, nextVal) + np.multiply(flag, term_list) + reward_list.view(-1)).float()
                           - curVal - A)**2 
                         + penalty*torch.var(c1_list.view(-1,self.num_players),1).view(-1,1).repeat(1,2).view(-1)
