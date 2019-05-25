@@ -95,7 +95,7 @@ if __name__ == '__main__':
                 target_q = np.random.multivariate_normal(np.ones(num_players)*(space[1]+space[0])/2,np.diag(np.ones(num_players)*(space[1]-space[0])/4))
                 a = target_q - current_state.q
             else:
-                a = nash_agent.predict_action([current_state])[0].mu.data.numpy()
+                a = nash_agent.predict_action([current_state])[0].mu.cpu().data.numpy()
             a = trunc_array(a, max_action)
             
             # Take Chosen Actions and Take Step
@@ -120,16 +120,16 @@ if __name__ == '__main__':
             nash_agent.optimizer_DQN.step()
             
             # Calculations Current Step's Total Loss
-            cur_loss = nash_agent.compute_action_Loss([experience]).data.numpy()
-            cur_val_loss = nash_agent.compute_value_Loss([experience]).data.numpy()
+            cur_loss = nash_agent.compute_action_Loss([experience]).cpu().data.numpy()
+            cur_val_loss = nash_agent.compute_value_Loss([experience]).cpu().data.numpy()
             total_l += cur_loss + cur_val_loss
 
             # Prints Some Information
             if (print_flag):
                 cur = nash_agent.predict_action([current_state])[0]
-                curNashVal = np.transpose(nash_agent.predict_value([current_state]).data.numpy())
+                curNashVal = np.transpose(nash_agent.predict_value([current_state]).cpu().data.numpy())
                 print("{} , Action: {}, Nash Value: {}".\
-                      format( current_state, cur.mu.data.numpy(), curNashVal ) )
+                      format( current_state, cur.mu.cpu().data.numpy(), curNashVal ) )
                 print("")
                 
         sum_loss[k] = total_l
