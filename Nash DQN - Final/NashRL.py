@@ -11,44 +11,50 @@ from NashAgent_lib import *
 # Set global digit printing options
 np.set_printoptions(precision=4)
 
+# Define Training and Model Parameters
+num_players = 5           # Total number of agents
+T = 15                    # Total number of time steps
+
+#Default simulation parameters
+sim_dict = {'price_impact': .3,
+            'transaction_cost':.5,
+            'liquidation_cost':.5,
+            'running_penalty':0,
+            'T':T,
+            'dt':1,
+            'N_agents':num_players,
+            'drift_function':(lambda x,y: 0.1*(10-y)) , #x -> time, y-> price
+            'volatility':1,
+            'initial_price_var':20}
+
 # Define truncation function
 def trunc_array(a,max_a):
     """
     Truncate a into [-max_a,max_a]
     :param a: array / tensor to truncate
-    :param max_a: truncation threshold (max_a > 0)6
+    :param max_a: truncation threshold (max_a > 0)
     :return: Truncated Array
     """
     lt, gt = a < -max_a, a > max_a
     return a * (1 - lt - gt) - lt * max_a + gt*max_a
 
-if __name__ == '__main__':
-
-    # Define Training and Model Parameters
-    num_players = 5           # Total number of agents
-    T = 15                    # Total number of time steps
-    
+def run_Nash_Agent(num_sim = 15000, batch_update_size = 100, buffersize = 5000, AN_file_name = "Action_Net", VN_file_name = "Value_Net"):
+    """
+    Runs the nash RL algothrim and outputs two files that hold the network parameters
+    for the estimated action network and value network
+    :param num_sim:           Number of Simulations
+    :param batch_update_size: Number of experiences sampled at each time step
+    :param buffersize:        Maximum size of replay buffer
+    :return: Truncated Array
+    """
     #number of parameters that need to be estimated by the network
-    batch_update_size = 100  # Number of experiences sampled at each time step
-    num_sim = 15000          # Number of Simulations
     max_action = 100         # Size of Largest Action that can be taken
-    buffersize = 5000        # Maximum size of replay buffer
     
     # Set number of output variables needed from net:
     # (c1 + c2 + c3 + mu)
     parameter_number = 4
     
     # Package Simulation Parameters
-    sim_dict = {'price_impact': .3,
-                'transaction_cost':.5,
-                'liquidation_cost':.5,
-                'running_penalty':0,
-                'T':T,
-                'dt':1,
-                'N_agents':num_players,
-                'drift_function':(lambda x,y: 0.1*(10-y)) , #x -> time, y-> price
-                'volatility':1,
-                'initial_price_var':20}
     sim = MarketSimulator(sim_dict)
     
     #Estimate/actual transaction costs (used to improve convergence of nash value)
@@ -58,7 +64,7 @@ if __name__ == '__main__':
     term_cost = sim_dict['liquidation_cost']
     
     # Initialize NashNN Agents
-    nash_agent = NashNN(2+num_players,parameter_number,num_players,T,est_tr_cost,term_cost,num_moms = 1)
+    nash_agent = NashNN(2+num_players,parameter_number,num_players,T,est_tr_cost,term_cost,num_moms = 5)
         
     current_state = sim.get_state()[0]
     
@@ -135,6 +141,7 @@ if __name__ == '__main__':
         sum_loss[k] = total_l
         sim.reset()
           
-    torch.save(nash_agent.action_net.state_dict(),"Action_Net")
-    torch.save(nash_agent.value_net.state_dict(),"Value_Net")
+    torch.save(nash_agent.action_net.state_dict(),AN_file_name)
+    torch.save(nash_agent.value_net.state_dict(),VN_file_name)
+    print("Simulations Complete")
     

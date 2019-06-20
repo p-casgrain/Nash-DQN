@@ -40,9 +40,7 @@ class PermInvariantQNN(torch.nn.Module):
         self.moment_encoder_net = nn.Sequential(
             nn.Linear(self.block_size, 20),
             nn.LeakyReLU(),
-            nn.Linear(20, 40),
-            nn.LeakyReLU(),
-            nn.Linear(40, 20),
+            nn.Linear(20, 20),
             nn.LeakyReLU(),
             nn.Linear(20, self.num_moments),
             #nn.BatchNorm1d(self.num_moments)
@@ -51,17 +49,15 @@ class PermInvariantQNN(torch.nn.Module):
         self.decoder_net = nn.Sequential(
             nn.Linear(self.num_moments + self.non_invar_dim, 20),
             nn.ReLU(),
-            nn.Linear(20, 40),
+            nn.Linear(20, 20),
             nn.ReLU(),
-            nn.Linear(40, 20),
-            nn.LeakyReLU(),
             nn.Linear(20, self.out_dim)
         )
 
     def forward(self, invar_input, non_invar_input):
         # Reshape invar_input into blocks and compute "moments"
-        invar_moments = torch.sum(invar_input,dim = 1).view(-1,1)
-        invar_moments = invar_moments / self.num_blocks
+        invar_split = torch.split(invar_input, self.block_size, dim=1)
+        invar_moments = sum((self.moment_encoder_net(ch) for ch in invar_split))
 
         # Concat moment vector with non-invariant input and pipe into next layer
         cat_input = torch.cat((invar_moments, non_invar_input), dim=1)
