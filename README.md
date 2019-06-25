@@ -1,6 +1,5 @@
-Scripts used to generate output in the paper: 
-Deep Q-Learning for Nash Equilibria: Nash-DQN
-https://arxiv.org/abs/1904.10554
+This repository contains the code for the Nash-DQN algorithm for general-sum multi-agent reinforcement learning.
+The associated paper "Deep Q-Learning for Nash Equilibria: Nash-DQN" can be found at https://arxiv.org/abs/1904.10554.
 
 INSTRUCTIONS:
 
