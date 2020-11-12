@@ -19,37 +19,44 @@ State object summarizing observable features of the environment at each time ste
 :param p:  Price of stock
 :param q:  Array of inventory levels of all agents
 """
-State = namedtuple('State', ('t', 'p', 'q'))
+ProtoState = namedtuple('State', ('t', 'p', 'i', 'q'))
+class State(ProtoState):
+    def to_numpy(self):
+        return np.concatenate([x for x in self], axis=None)
+    def to_tensor(self, **kwargs):
+        return torch.tensor(self.to_numpy(), **kwargs)
 
-class State(State):
-    """
-    Game State Class.
-    __init__ takes arguments (t,p,q)
-    Inherits from namedtuple class
-    """
 
-    def getNormalizedState(self, toTensor=True):
-        """
-        Returned Normalized State Values
-        :return: Array of concatenated values
-        """
+# class State(State):
+#     """
+#     Game State Class.
+#     __init__ takes arguments (t,p,q,i)
+#     Inherits from namedtuple class
+#     """
 
-        norm_q = self.q / 200
-        norm_p = (self.p - 110) / 100
-        norm_t = (self.t - 12) / 12
-        out = copy.deepcopy(np.concatenate( (np.array([norm_t,norm_p]), norm_q) ))
+#     def getNormalizedState(self, toTensor=True):
+#         """
+#         Returned Normalized State Values
+#         :return: Array of concatenated values
+#         """
 
-        if toTensor:
-            return out
-        else:
-            return torch.from_numpy(out)
+#         norm_q = self.q / 200
+#         norm_p = (self.p - 110) / 100
+#         norm_t = (self.t - 12) / 12
+
+#         out = copy.deepcopy(np.concatenate( (np.array([norm_t,norm_p]), norm_q) ))
+
+#         if toTensor:
+#             return out
+#         else:
+#             return torch.from_numpy(out)
     
-    def getState (self):
-        """
-        Returned Non-Normalized State Values
-        :return: Array of concatenated values
-        """
-        return copy.deepcopy(np.concatenate( (np.array([self.t,self.p]), self.q) ))
+#     def getState (self):
+#         """
+#         Returned Non-Normalized State Values
+#         :return: Array of concatenated values
+#         """
+#         return copy.deepcopy(np.concatenate( (np.array([self.t,self.p]), self.q) ))
 
 
 class MarketSimulator(object):
@@ -68,10 +75,19 @@ class MarketSimulator(object):
     :param sigma0:  Volatility of initial stock price
     :param r:       Reward function for the agents
     """
-    def __init__(self, param_dict):
+    def __init__(self, param_dict_in):
+        # Fill in default input arguments
+        def_dict = {'trans_impact_scale': 0.0,
+                    'trans_impact_decay': 0.0,
+                    'perm_price_impact': 0.0 }
+
+        param_dict = {**def_dict, **param_dict_in}
+
         # Unpack Parameter Dictionary
         # Game-Specific Parameters
-        self.p_imp = param_dict['price_impact']
+        self.perm_imp = param_dict['perm_price_impact']
+        self.tmp_scale = param_dict['trans_impact_scale']
+        self.tmp_decay = param_dict['trans_impact_decay']
         self.t_cost = param_dict['transaction_cost']
         self.L_cost = param_dict['liquidation_cost']
         self.phi = param_dict['running_penalty']
@@ -90,8 +106,10 @@ class MarketSimulator(object):
         # Allocating Memory for Game Variables
         self.Q = np.random.normal(0, self.sigma0, self.N)
         self.S = np.float32(10 + np.random.normal(0, self.sigma))
+        self.I = np.random.normal(0, 0.25*self.sigma)
         self.dS = np.float32(0)
         self.dF = np.float32(0)
+        self.dI = np.float32(0)
         self.t = np.float32(0)
 
         # Variable Containing Total Accumulated Score
@@ -107,7 +125,7 @@ class MarketSimulator(object):
         Ensure price process does not fall below 0
         """
         if self.S <= 0:
-            self.S = 0.01
+            self.S = 0.0001
             
     def setInv(self,inv):
         """
@@ -122,6 +140,7 @@ class MarketSimulator(object):
         """
         self.Q = np.random.normal(0, 10, self.N)
         self.S = np.float32(10 + np.random.normal(0, self.sigma))
+        self.I = np.random.normal(0, 0.25*self.sigma)
         self.t = np.float32(0)
 
         self.last_reward = np.zeros(self.N, dtype=np.float32)
@@ -142,7 +161,8 @@ class MarketSimulator(object):
         :param nu: Array containing the actions of all agents
         :returns:  Transition object containing summary of the change to the environment
         """
-        last_state = State(self.t,self.S,self.Q)
+        last_state, _, _ = self.get_state()
+
         if self.t < self.T:
             # Advance Inventory & Time
             self.Q += nu
@@ -154,24 +174,31 @@ class MarketSimulator(object):
 
             # Advance Asset Price
             self.dF = self.mu(self.t, self.S) * self.dt + self.sigma * self.dW[int(round(self.t))]
-            #self.dS = self.dF + self.dt * (self.p_imp * np.sign(np.mean(nu))*np.sqrt(np.abs(np.mean(nu))))
-            self.dS = self.dF + self.dt * (self.p_imp * np.mean(nu))
+            #self.dS = self.dF + self.dt * (self.perm_imp * np.sign(np.mean(nu))*np.sqrt(np.abs(np.mean(nu))))
+            self.dI = self.I * ( np.exp(-self.tmp_decay*self.dt) - 1) + self.dt * ( self.tmp_scale * np.mean(nu) )
+            self.I += self.dI
+            self.dS = self.dF + self.dI + self.dt * (self.perm_imp * np.mean(nu))
             self.S += self.dS
 
-        return Transition(last_state, nu, State(self.t, self.S, self.Q), self.last_reward)
+        cur_state, _, _ = self.get_state()
+
+        return Transition(last_state, nu, cur_state, self.last_reward)
 
     def get_state(self):
         """
         Returns the observable features of the current state
         :return: State object summarizing observable features of the current state
         """
-        return State(copy.deepcopy(self.t), copy.deepcopy(self.S), copy.deepcopy(self.Q)), copy.deepcopy(self.last_reward), copy.deepcopy(self.total_reward)
+        return State(self.T-self.t, self.S, self.I, self.Q), self.last_reward, self.total_reward
 
     def __str__(self):
         state, last_reward, total_reward = self.get_state()
         str = "Simulation -- Last State: {}, \
         Last Reward: {}, Total Reward: {}".format(state,last_reward,total_reward)
         return str
+
+    def __repr__(self):
+        return self.__str__()
 
 
 class ExperienceReplay:

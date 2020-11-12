@@ -10,6 +10,7 @@ from nashRL_netlib import *
 from NashAgent_lib import *
 from textwrap import wrap
 
+
 font = {'size'   : 17}
 
 def to_State_mesh(t_list, q_list, p, net, nump, other_inv):
@@ -187,7 +188,7 @@ def fixed_sample_paths(net,num_plots,nump,T,sim_dict,random_seed):
         
 if __name__ == '__main__':
     num_players = 5
-    sim_dict = {'price_impact': .3,
+    sim_dict = {'perm_price_impact': .3,
                 'transaction_cost':.5,
                 'liquidation_cost':.5,
                 'running_penalty':0,

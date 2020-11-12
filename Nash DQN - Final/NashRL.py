@@ -16,7 +16,7 @@ num_players = 5           # Total number of agents
 T = 15                    # Total number of time steps
 
 #Default simulation parameters
-sim_dict = {'price_impact': .3,
+sim_dict = {'perm_price_impact': .3,
             'transaction_cost':.5,
             'liquidation_cost':.5,
             'running_penalty':0,
@@ -64,7 +64,8 @@ def run_Nash_Agent(num_sim = 15000, batch_update_size = 100, buffersize = 5000, 
     term_cost = sim_dict['liquidation_cost']
     
     # Initialize NashNN Agents
-    nash_agent = NashNN(2+num_players,parameter_number,num_players,T,est_tr_cost,term_cost,num_moms = 5)
+    net_input_dim = sim.get_state()[0].to_numpy().shape[0]
+    nash_agent = NashNN(net_input_dim,parameter_number,num_players,T,est_tr_cost,term_cost,num_moms = 5)
         
     current_state = sim.get_state()[0]
     
@@ -92,8 +93,8 @@ def run_Nash_Agent(num_sim = 15000, batch_update_size = 100, buffersize = 5000, 
         print_flag = not k % 20
         if print_flag : print("New Simulation:", k,  "\n", sim.get_state()[0])
         
-        for i in range(0,T):
-            current_state,lr,tr = sim.get_state()
+        for _ in range(0,T):
+            current_state,lr,_ = sim.get_state()
             
             if np.random.random() < eps:
                 #Set target level of inventory level to cover feasible exploration space
