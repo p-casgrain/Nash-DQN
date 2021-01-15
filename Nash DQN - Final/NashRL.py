@@ -28,15 +28,6 @@ sim_dict = {'perm_price_impact': .3,
             'initial_price_var':20}
 
 # Define truncation function
-def trunc_array(a,max_a):
-    """
-    Truncate a into [-max_a,max_a]
-    :param a: array / tensor to truncate
-    :param max_a: truncation threshold (max_a > 0)
-    :return: Truncated Array
-    """
-    lt, gt = a < -max_a, a > max_a
-    return a * (1 - lt - gt) - lt * max_a + gt*max_a
 
 def run_Nash_Agent(num_sim = 15000, batch_update_size = 100, buffersize = 5000, AN_file_name = "Action_Net", VN_file_name = "Value_Net"):
     """
@@ -103,7 +94,8 @@ def run_Nash_Agent(num_sim = 15000, batch_update_size = 100, buffersize = 5000, 
                 a = target_q - current_state.q
             else:
                 a = nash_agent.predict_action([current_state])[0].mu.cpu().data.numpy()
-            a = trunc_array(a, max_action)
+
+            a = torch.clamp(a, -max_a, max_a)
             
             # Take Chosen Actions and Take Step
             sim.step(a)
