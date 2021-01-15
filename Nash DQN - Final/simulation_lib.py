@@ -175,7 +175,8 @@ class MarketSimulator(object):
             # Advance Asset Price
             self.dF = self.mu(self.t, self.S) * self.dt + self.sigma * self.dW[int(round(self.t))]
             #self.dS = self.dF + self.dt * (self.perm_imp * np.sign(np.mean(nu))*np.sqrt(np.abs(np.mean(nu))))
-            self.dI = self.I * ( np.exp(-self.tmp_decay*self.dt) - 1) + self.dt * ( self.tmp_scale * np.mean(nu) )
+            self.dI = self.I * (np.exp(-self.tmp_decay*self.dt) - 1) + \
+                self.dt * self.tmp_scale * self.impact_scale(np.mean(nu))
             self.I += self.dI
             self.dS = self.dF + self.dI + self.dt * (self.perm_imp * np.mean(nu))
             self.S += self.dS
@@ -183,6 +184,9 @@ class MarketSimulator(object):
         cur_state, _, _ = self.get_state()
 
         return Transition(last_state, nu, cur_state, self.last_reward)
+    
+    def impact_scale(self,v):
+        return np.sign(v)*np.sqrt(np.abs(v))
 
     def get_state(self):
         """
