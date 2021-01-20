@@ -25,7 +25,12 @@ class State(ProtoState):
         return np.concatenate([x for x in self], axis=None)
     def to_tensor(self, **kwargs):
         return torch.tensor(self.to_numpy(), **kwargs)
-
+    def to_sep_numpy(self, idx):
+        # i is agent index (start from 0) to include is invariant
+        return np.concatenate([self.t, self.p, self.q[idx], self.i],axis = None), np.concatenate([self.q[:idx], self.q[idx+1:]], axis = None) 
+    def to_sep_tensor(self, idx, **kwargs):
+        non_inv, inv = self.to_sep_numpy(idx)
+        return torch.tensor(non_inv, **kwargs), torch.tensor(inv, **kwargs)
 
 # class State(State):
 #     """

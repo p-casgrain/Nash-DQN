@@ -2,7 +2,6 @@ import numpy as np
 import torch
 
 from simulation_lib import *
-from nashRL_netlib import *
 from NashAgent_lib import *
 # -------------------------------------------------------------------
 # This file executes the Nash-DQN Reinforcement Learning Algorithm
@@ -39,7 +38,7 @@ def run_Nash_Agent(num_sim = 15000, batch_update_size = 100, buffersize = 5000, 
     :return: Truncated Array
     """
     #number of parameters that need to be estimated by the network
-    max_action = 100         # Size of Largest Action that can be taken
+    max_a = 100         # Size of Largest Action that can be taken
     
     # Set number of output variables needed from net:
     # (c1 + c2 + c3 + mu)
@@ -55,8 +54,8 @@ def run_Nash_Agent(num_sim = 15000, batch_update_size = 100, buffersize = 5000, 
     term_cost = sim_dict['liquidation_cost']
     
     # Initialize NashNN Agents
-    net_input_dim = sim.get_state()[0].to_numpy().shape[0]
-    nash_agent = NashNN(net_input_dim,parameter_number,num_players,T,est_tr_cost,term_cost,num_moms = 5)
+    net_non_inv_dim = sim.get_state()[0].to_numpy().shape[0] - (num_players - 1) # all state variables but other agent's inventories
+    nash_agent = NashNN(net_non_inv_dim,parameter_number,num_players,T,est_tr_cost,term_cost,num_moms = 5)
         
     current_state = sim.get_state()[0]
     
@@ -93,12 +92,12 @@ def run_Nash_Agent(num_sim = 15000, batch_update_size = 100, buffersize = 5000, 
                 target_q = np.random.multivariate_normal(np.ones(num_players)*(space[1]+space[0])/2,np.diag(np.ones(num_players)*(space[1]-space[0])/4))
                 a = target_q - current_state.q
             else:
-                a = nash_agent.predict_action([current_state])[0].mu.cpu().data.numpy()
+                a = nash_agent.predict_action([current_state])[0].mu
 
-            a = torch.clamp(a, -max_a, max_a)
+            a = torch.clamp(torch.tensor(a).detach(), -max_a, max_a)
             
             # Take Chosen Actions and Take Step
-            sim.step(a)
+            sim.step(a.cpu().numpy())
             new_state,lr,tr = sim.get_state()
             experience = (current_state,a,new_state,lr)
             replay.add(experience)

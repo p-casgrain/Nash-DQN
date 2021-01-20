@@ -89,27 +89,28 @@ class NashNN():
     """
     Object summarizing estimated parameters of the advantage function, initiated 
     through a vector of inputs
-    :param input_dim:    Number of total input features
+    :param non_invar_dim:Number of total non invariant (i.e. market state) input features
     :param output_dim:   Number of total parameters to be estimated via NN
     :param nump:         Number of agents
     :param t:            Number of total time steps
     :param t_cost:       Transaction costs (estimated or otherwise)
     :param term_cost:    Terminal costs (estimated or otherwise)
     """
-    def __init__(self, input_dim, output_dim, n_players, max_steps, trans_cost, terminal_cost, num_moms = 5):
+    def __init__(self, non_invar_dim, output_dim, n_players, max_steps, trans_cost, terminal_cost, num_moms = 5):
         # Simulation Parameters
         self.num_players = n_players         
         self.T = max_steps                      
         self.transaction_cost = trans_cost  
-        self.terminal_cost = terminal_cost     
+        self.terminal_cost = terminal_cost   
+        self.non_invar_dim = non_invar_dim 
         
         # Initialize Networks
         if torch.cuda.is_available():
-            self.action_net = PermInvariantQNN(in_invar_dim = self.num_players - 1, non_invar_dim = 3, out_dim = output_dim, num_moments=num_moms).cuda()
-            self.value_net = PermInvariantQNN(in_invar_dim = self.num_players - 1, non_invar_dim = 3, out_dim = 1).cuda()
+            self.action_net = PermInvariantQNN(in_invar_dim = self.num_players - 1, non_invar_dim = self.non_invar_dim, out_dim = output_dim, num_moments=num_moms).cuda()
+            self.value_net = PermInvariantQNN(in_invar_dim = self.num_players - 1, non_invar_dim = self.non_invar_dim, out_dim = 1).cuda()
         else:
-            self.action_net = PermInvariantQNN(in_invar_dim=self.num_players - 1, non_invar_dim=3, out_dim=output_dim, num_moments=num_moms)
-            self.value_net = PermInvariantQNN(in_invar_dim=self.num_players - 1, non_invar_dim=3, out_dim=1)
+            self.action_net = PermInvariantQNN(in_invar_dim=self.num_players - 1, non_invar_dim = self.non_invar_dim, out_dim=output_dim, num_moments=num_moms)
+            self.value_net = PermInvariantQNN(in_invar_dim=self.num_players - 1, non_invar_dim = self.non_invar_dim, out_dim=1)
 
 
         # Define optimizer used (SGD, etc)
@@ -156,17 +157,14 @@ class NashNN():
         :return:              Matrix of the batch of features structured to be pass into NN
         """
         expanded_states = []
+        expanded_ivt_states = []
         for cur_s in state_list:
-            # if norm:
-            #     s = cur_s.getNormalizedState()
-            # else:
-            #     s = cur_s.getState()
-            
-            for _ in range(0,self.num_players):
-                # expanded_states.append(np.append(np.append(np.array([s[0],s[1],s[2+j]]),s[2:2+j]),s[2+j+1:]))
-                expanded_states.append(cur_s.to_numpy())
+            for i in range(0,self.num_players):
+                s, s_inv = cur_s.to_sep_numpy(i)
+                expanded_states.append(s)
+                expanded_ivt_states.append(s_inv)
                 
-        return np.array(expanded_states)
+        return np.array(expanded_states), np.array(expanded_ivt_states)
     
     def predict_action(self, states):
         """
@@ -174,12 +172,12 @@ class NashNN():
         :param states:    List of environmental state objects
         :return:          List of NashFittedValue objects representing the estimated parameters
         """
-        expanded_states = torch.tensor(self.expand_list(states)).float()
+        expanded_states, inv_states = torch.tensor(self.expand_list(states)).float()
 
         if torch.cuda.is_available():
-            action_list = self.action_net.forward(invar_input = expanded_states[:,3:].cuda(), non_invar_input = expanded_states[:,0:3].cuda())
+            action_list = self.action_net.forward(invar_input = inv_states.cuda(), non_invar_input = expanded_states.cuda())
         else:
-            action_list = self.action_net.forward(invar_input=expanded_states[:, 3:], non_invar_input=expanded_states[:, 0:3])
+            action_list = self.action_net.forward(invar_input = inv_states, non_invar_input = expanded_states)
             
         NFV_list = []
         for i in range(0,len(states)):
@@ -193,12 +191,12 @@ class NashNN():
         :param states:    List of environmental state objects
         :return:          Tensor of estimated nash values of all agents for the batch of states
         """
-        expanded_states = torch.tensor(self.expand_list(states)).float()
+        expanded_states, inv_states = torch.tensor(self.expand_list(states)).float()
 
         if torch.cuda.is_available():
-            values = self.value_net.forward(invar_input = expanded_states[:,3:].cuda(), non_invar_input = expanded_states[:,0:3].cuda())
+            values = self.value_net.forward(invar_input = inv_states.cuda(), non_invar_input = expanded_states.cuda())
         else:
-            values = self.value_net.forward(invar_input = expanded_states[:,3:], non_invar_input = expanded_states[:,0:3])
+            values = self.value_net.forward(invar_input = inv_states, non_invar_input = expanded_states)
         return values
 
     def compute_value_Loss(self,state_tuples):
@@ -215,8 +213,8 @@ class NashNN():
         isLastState = np.repeat(np.array([s.t > self.T - 1 for s in next_state_list]).astype(int),self.num_players)
         
         target = self.predict_value(cur_state_list).view(-1)
-        expanded_states = self.expand_list(cur_state_list, norm = False)
-        expanded_next_states = self.expand_list(next_state_list, norm = False)
+        expanded_states, _ = self.expand_list(cur_state_list, norm = False)
+        expanded_next_states, _ = self.expand_list(next_state_list, norm = False)
 
         term_list = np.array(list(map(lambda p,q,tc: q*p - tc*q**2, expanded_states[:,1],expanded_states[:,2]/2,self.transaction_cost*np.ones(len(expanded_states))))) \
                     + np.array(list(map(lambda p,q,tc: q*p - tc*q**2, expanded_next_states[:,1],expanded_states[:,2]/2,self.transaction_cost*np.ones(len(expanded_states)))))
@@ -242,7 +240,7 @@ class NashNN():
         penalty = 25
         
         cur_state_list = [tup[0] for tup in state_tuples]
-        action_list = torch.tensor([tup[1] for tup in state_tuples])
+        action_list = torch.stack([tup[1] for tup in state_tuples])
         next_state_list = [tup[2] for tup in state_tuples]
         reward_list = torch.tensor([tup[3] for tup in state_tuples]).float()
         
@@ -254,7 +252,7 @@ class NashNN():
         nextVal = self.predict_value(next_state_list).detach().view(-1).cpu().data.numpy()    # Nash Value of Next state
         
         #Makes Matrix of Terminal Values
-        expanded_next_states = self.expand_list(next_state_list, norm = False)
+        expanded_next_states, _ = self.expand_list(next_state_list, norm = False)
         term_list = np.array(list(map(lambda p,q,tc: q*p - tc*q**2, expanded_next_states[:,1],expanded_next_states[:,2],self.terminal_cost*np.ones(len(expanded_next_states)))))
         
         # Create Lists for predicted Values
@@ -274,13 +272,13 @@ class NashNN():
                         dim = 1) - c3_list * torch.sum((uNeg_list - muNeg_list)**2,dim = 1) / 2
 
         if torch.cuda.is_available():
-            return torch.sum((torch.tensor(np.multiply(np.ones(len(curVal))-isLastState, nextVal) + np.multiply(isLastState, term_list) + reward_list.view(-1)).float()
+            return torch.sum((torch.tensor(np.multiply(np.ones(len(curVal))-isLastState, nextVal) + np.multiply(isLastState, term_list) + reward_list.view(-1).cpu().numpy()).float()
                             - curVal - A)**2 
                             + penalty*torch.var(c1_list.view(-1,self.num_players),1).view(-1,1).repeat(1,self.num_players).view(-1)
                             + penalty*torch.var(c2_list.view(-1,self.num_players),1).view(-1,1).repeat(1,self.num_players).view(-1)
                             + penalty*torch.var(c3_list.view(-1,self.num_players),1).view(-1,1).repeat(1,self.num_players).view(-1)).cuda()
         else:
-            return torch.sum((torch.tensor(np.multiply(np.ones(len(curVal))-isLastState, nextVal) + np.multiply(isLastState, term_list) + reward_list.view(-1)).float()
+            return torch.sum((torch.tensor(np.multiply(np.ones(len(curVal))-isLastState, nextVal) + np.multiply(isLastState, term_list) + reward_list.view(-1).numpy()).float()
                               - curVal - A)**2
                              + penalty*torch.var(c1_list.view(-1, self.num_players),1).view(-1, 1).repeat(1, self.num_players).view(-1)
                              + penalty*torch.var(c2_list.view(-1, self.num_players), 1).view(-1, 1).repeat(1, self.num_players).view(-1)
