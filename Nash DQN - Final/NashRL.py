@@ -7,28 +7,9 @@ from NashAgent_lib import *
 # This file executes the Nash-DQN Reinforcement Learning Algorithm
 # -------------------------------------------------------------------
 
-# Set global digit printing options
-np.set_printoptions(precision=4)
-
-# Define Training and Model Parameters
-num_players = 5           # Total number of agents
-T = 15                    # Total number of time steps
-
-#Default simulation parameters
-sim_dict = {'perm_price_impact': .3,
-            'transaction_cost':.5,
-            'liquidation_cost':.5,
-            'running_penalty':0,
-            'T':T,
-            'dt':1,
-            'N_agents':num_players,
-            'drift_function':(lambda x,y: 0.1*(10-y)) , #x -> time, y-> price
-            'volatility':1,
-            'initial_price_var':20}
-
 # Define truncation function
 
-def run_Nash_Agent(num_sim = 15000, batch_update_size = 100, buffersize = 5000, AN_file_name = "Action_Net", VN_file_name = "Value_Net"):
+def run_Nash_Agent(sim_dict,num_sim = 15000, batch_update_size = 100, buffersize = 5000, AN_file_name = "Action_Net", VN_file_name = "Value_Net"):
     """
     Runs the nash RL algothrim and outputs two files that hold the network parameters
     for the estimated action network and value network
@@ -45,7 +26,7 @@ def run_Nash_Agent(num_sim = 15000, batch_update_size = 100, buffersize = 5000, 
     parameter_number = 4
     
     # Package Simulation Parameters
-    sim = MarketSimulator(sim_dict)
+    sim_obj = MarketSimulator(sim_dict)
     
     #Estimate/actual transaction costs (used to improve convergence of nash value)
     est_tr_cost = sim_dict['transaction_cost']
@@ -54,14 +35,22 @@ def run_Nash_Agent(num_sim = 15000, batch_update_size = 100, buffersize = 5000, 
     term_cost = sim_dict['liquidation_cost']
     
     # Initialize NashNN Agents
-    net_non_inv_dim = sim.get_state()[0].to_numpy().shape[0] - (num_players - 1) # all state variables but other agent's inventories
-    nash_agent = NashNN(net_non_inv_dim,parameter_number,num_players,T,est_tr_cost,term_cost,num_moms = 5)
+    st0, _, _ = sim_obj.get_state()
+    n_agents = sim_obj.N
+    max_T = sim_obj.T
+
+    # all state variables but other agent's inventories
+    net_non_inv_dim = st0.to_numpy().shape[0] - (n_agents - 1)
+
+    nash_agent = NashNN(non_invar_dim=net_non_inv_dim, n_players=n_agents,
+                        output_dim=parameter_number, max_steps=max_T,
+                        trans_cost=est_tr_cost, terminal_cost=term_cost, 
+                        num_moms=5)
+
         
-    current_state = sim.get_state()[0]
-    
     #exploration chance
     ep = 0.5         #Initial chance
-    min_ep = 0.1     #Minimum chance
+    min_ep = 0.05     #Minimum chance
 
     # Intialize relay memory
     replay = ExperienceReplay(buffersize)
@@ -80,16 +69,19 @@ def run_Nash_Agent(num_sim = 15000, batch_update_size = 100, buffersize = 5000, 
         total_l = 0        
 
         # Sets Print Flag - Prints simulation results every 20 simuluations
-        print_flag = not k % 20
-        if print_flag : print("New Simulation:", k,  "\n", sim.get_state()[0])
+        print_flag = not k % 30
+        if print_flag : print("New Simulation:", k,  "\n", sim_obj.get_state()[0])
         
-        for _ in range(0,T):
-            current_state,lr,_ = sim.get_state()
+        for _ in range(0, max_T):
+            current_state,lr,_ = sim_obj.get_state()
             
             if np.random.random() < eps:
                 #Set target level of inventory level to cover feasible exploration space
                 # then select action so it results in that inventory level
-                target_q = np.random.multivariate_normal(np.ones(num_players)*(space[1]+space[0])/2,np.diag(np.ones(num_players)*(space[1]-space[0])/4))
+                target_q = np.random.multivariate_normal(\
+                    np.ones(n_agents)*(space[1]+space[0])/2,\
+                    np.diag(np.ones(n_agents)*(space[1]-space[0])/4) )
+                    
                 a = target_q - current_state.q
             else:
                 a = nash_agent.predict_action([current_state])[0].mu
@@ -97,8 +89,8 @@ def run_Nash_Agent(num_sim = 15000, batch_update_size = 100, buffersize = 5000, 
             a = torch.clamp(torch.tensor(a).detach(), -max_a, max_a)
             
             # Take Chosen Actions and Take Step
-            sim.step(a.cpu().numpy())
-            new_state,lr,tr = sim.get_state()
+            sim_obj.step(a.numpy())
+            new_state,lr,tr = sim_obj.get_state()
             experience = (current_state,a,new_state,lr)
             replay.add(experience)
 
@@ -126,14 +118,68 @@ def run_Nash_Agent(num_sim = 15000, batch_update_size = 100, buffersize = 5000, 
             if (print_flag):
                 cur = nash_agent.predict_action([current_state])[0]
                 curNashVal = np.transpose(nash_agent.predict_value([current_state]).cpu().data.numpy())
-                print("{} , Action: {}, Nash Value: {}".\
+                print("{} , Action: {}, Nash Value: {}\n".\
                       format( current_state, cur.mu.cpu().data.numpy(), curNashVal ) )
-                print("")
                 
         sum_loss[k] = total_l
-        sim.reset()
+        sim_obj.reset()
+
+        if print_flag:
+            print("Current Loss: {}\n\n".format(total_l))
           
     torch.save(nash_agent.action_net.state_dict(),AN_file_name)
     torch.save(nash_agent.value_net.state_dict(),VN_file_name)
     print("Simulations Complete")
+    
+
+
+if __name__=='__main__':
+
+    # Set global digit printing options
+    np.set_printoptions(precision=4)
+
+    # Define Training and Model Parameters
+    num_players = 5           # Total number of agents
+    T = 15                    # Total number of time steps
+
+
+    num_players = 2
+    T = 5
+
+
+    #Default simulation parameters
+    sim_dict = {'perm_price_impact': .3,
+                'transaction_cost': .5,
+                'liquidation_cost': .5,
+                'running_penalty': 0,
+                'T': T,
+                'dt': 1,
+                'N_agents': num_players,
+                'drift_function': (lambda x, y: 0.1*(10-y)),
+                'volatility': 1,
+                'initial_price_var': 20}
+
+    # run_Nash_Agent(sim_dict,num_sim=15000, AN_file_name="Action_Net")
+    run_Nash_Agent(sim_dict, num_sim=1500, AN_file_name="Action_Net")
+
+
+    sim_obj = MarketSimulator(sim_dict)
+    net_non_inv_dim = len(sim_obj.get_state()[0].to_numpy())
+    net_non_inv_dim -= sim_obj.N-1
+    out_dim = 4
+    nash_agent = NashNN(non_invar_dim=net_non_inv_dim,n_players=sim_obj.N,
+                        output_dim=4, max_steps=T, trans_cost=0.5, 
+                        terminal_cost=0.5, num_moms=5)
+
+    current_state = sim_obj.get_state()[0]
+    expanded_states, inv_states = nash_agent.expand_list(
+        [current_state], as_tensor=True)
+    
+    invar_split = torch.split(inv_states, 1, dim=1)
+
+    nash_agent.action_net.moment_encoder_net(invar_split[0])
+
+    nash_agent.action_net.forward(
+        invar_input=inv_states,
+        non_invar_input=expanded_states)
     

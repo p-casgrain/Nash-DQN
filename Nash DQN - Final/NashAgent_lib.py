@@ -55,27 +55,28 @@ class PermInvariantQNN(torch.nn.Module):
 
         # Define Networks
         self.moment_encoder_net = nn.Sequential(
-            nn.Linear(self.block_size, 20),
-            nn.LeakyReLU(),
-            nn.Linear(20, 20),
-            nn.LeakyReLU(),
-            nn.Linear(20, self.num_moments),
-            #nn.BatchNorm1d(self.num_moments)
+            nn.Linear(self.block_size, 25),
+            nn.ReLU(),
+            # nn.Linear(10, 10),
+            # nn.ReLU(),
+            nn.Linear(25, self.num_moments)
         )
 
         self.decoder_net = nn.Sequential(
-            nn.Linear(self.num_moments + self.non_invar_dim, 20),
+            nn.Linear(self.num_moments + self.non_invar_dim, 10),
             nn.ReLU(),
-            nn.Linear(20, 20),
+            nn.Linear(10, 10),
             nn.ReLU(),
-            nn.Linear(20, self.out_dim)
+            nn.Linear(10, self.out_dim)
         )
 
-    def forward(self, invar_input, non_invar_input):
+    def forward(self, invar_input, non_invar_input, inv_split_dim=1):
         # Reshape invar_input into blocks and compute "moments"
-        invar_split = torch.split(invar_input, self.block_size, dim=1)
-        invar_moments = sum((self.moment_encoder_net(ch)
-                             for ch in invar_split))
+        invar_split = torch.split(
+            invar_input, self.block_size, dim=inv_split_dim)
+        invar_moments = \
+            sum((self.moment_encoder_net(ch)
+                             for ch in invar_split)) / len(invar_split)
 
         # Concat moment vector with non-invariant input and pipe into next layer
         cat_input = torch.cat((invar_moments, non_invar_input), dim=1)
@@ -121,6 +122,9 @@ class NashNN():
         
         # Define loss function (Mean-squared, etc)
         self.criterion = nn.MSELoss()
+    
+    def __repr__(self):
+        return "NashNN Object:\n \# Players:%i\nT:%i\nNon Invariant Dim Size:%i" % (self.num_players, self.T, self.non_invar_dim)
 
     def slice(self,X,i):
         "Return all items in array except for i^th item"
@@ -141,7 +145,7 @@ class NashNN():
                 mat.append(self.slice(X[i,:],j))
         return torch.stack(mat)
     
-    def expand_list(self,state_list, norm = True):
+    def expand_list(self,state_list, as_tensor = True):
         """
         Creates a matrix of features for a batch of input states of the environment.
         
@@ -158,13 +162,17 @@ class NashNN():
         """
         expanded_states = []
         expanded_ivt_states = []
-        for cur_s in state_list:
-            for i in range(0,self.num_players):
-                s, s_inv = cur_s.to_sep_numpy(i)
-                expanded_states.append(s)
-                expanded_ivt_states.append(s_inv)
-                
-        return np.array(expanded_states), np.array(expanded_ivt_states)
+        if as_tensor:
+            for cur_s in state_list:
+                for i in range(0, self.num_players):
+                    s, s_inv = cur_s.to_sep_numpy(i)
+                    expanded_states.append(s)
+                    expanded_ivt_states.append(s_inv)
+
+        if as_tensor:
+            return torch.tensor(expanded_states, dtype=torch.float32), torch.tensor(expanded_ivt_states, dtype=torch.float32)
+        else:
+            return np.array(expanded_states), np.array(expanded_ivt_states)
     
     def predict_action(self, states):
         """
@@ -172,7 +180,7 @@ class NashNN():
         :param states:    List of environmental state objects
         :return:          List of NashFittedValue objects representing the estimated parameters
         """
-        expanded_states, inv_states = torch.tensor(self.expand_list(states)).float()
+        expanded_states, inv_states = self.expand_list(states,as_tensor=True)
 
         if torch.cuda.is_available():
             action_list = self.action_net.forward(invar_input = inv_states.cuda(), non_invar_input = expanded_states.cuda())
@@ -191,7 +199,7 @@ class NashNN():
         :param states:    List of environmental state objects
         :return:          Tensor of estimated nash values of all agents for the batch of states
         """
-        expanded_states, inv_states = torch.tensor(self.expand_list(states)).float()
+        expanded_states, inv_states = self.expand_list(states, as_tensor=True)
 
         if torch.cuda.is_available():
             values = self.value_net.forward(invar_input = inv_states.cuda(), non_invar_input = expanded_states.cuda())
@@ -213,8 +221,8 @@ class NashNN():
         isLastState = np.repeat(np.array([s.t > self.T - 1 for s in next_state_list]).astype(int),self.num_players)
         
         target = self.predict_value(cur_state_list).view(-1)
-        expanded_states, _ = self.expand_list(cur_state_list, norm = False)
-        expanded_next_states, _ = self.expand_list(next_state_list, norm = False)
+        expanded_states, _ = self.expand_list(cur_state_list)
+        expanded_next_states, _ = self.expand_list(next_state_list)
 
         term_list = np.array(list(map(lambda p,q,tc: q*p - tc*q**2, expanded_states[:,1],expanded_states[:,2]/2,self.transaction_cost*np.ones(len(expanded_states))))) \
                     + np.array(list(map(lambda p,q,tc: q*p - tc*q**2, expanded_next_states[:,1],expanded_states[:,2]/2,self.transaction_cost*np.ones(len(expanded_states)))))
@@ -252,7 +260,7 @@ class NashNN():
         nextVal = self.predict_value(next_state_list).detach().view(-1).cpu().data.numpy()    # Nash Value of Next state
         
         #Makes Matrix of Terminal Values
-        expanded_next_states, _ = self.expand_list(next_state_list, norm = False)
+        expanded_next_states, _ = self.expand_list(next_state_list)
         term_list = np.array(list(map(lambda p,q,tc: q*p - tc*q**2, expanded_next_states[:,1],expanded_next_states[:,2],self.terminal_cost*np.ones(len(expanded_next_states)))))
         
         # Create Lists for predicted Values

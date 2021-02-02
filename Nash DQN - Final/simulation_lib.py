@@ -1,7 +1,6 @@
 import numpy as np
 from collections import namedtuple
 import random
-import copy
 import torch
 
 """
@@ -32,36 +31,6 @@ class State(ProtoState):
         non_inv, inv = self.to_sep_numpy(idx)
         return torch.tensor(non_inv, **kwargs), torch.tensor(inv, **kwargs)
 
-# class State(State):
-#     """
-#     Game State Class.
-#     __init__ takes arguments (t,p,q,i)
-#     Inherits from namedtuple class
-#     """
-
-#     def getNormalizedState(self, toTensor=True):
-#         """
-#         Returned Normalized State Values
-#         :return: Array of concatenated values
-#         """
-
-#         norm_q = self.q / 200
-#         norm_p = (self.p - 110) / 100
-#         norm_t = (self.t - 12) / 12
-
-#         out = copy.deepcopy(np.concatenate( (np.array([norm_t,norm_p]), norm_q) ))
-
-#         if toTensor:
-#             return out
-#         else:
-#             return torch.from_numpy(out)
-    
-#     def getState (self):
-#         """
-#         Returned Non-Normalized State Values
-#         :return: Array of concatenated values
-#         """
-#         return copy.deepcopy(np.concatenate( (np.array([self.t,self.p]), self.q) ))
 
 
 class MarketSimulator(object):
@@ -134,7 +103,7 @@ class MarketSimulator(object):
             
     def setInv(self,inv):
         """
-        Ensure price process does not fall below 0
+        Manually set inventory level
         :param inv: Array containing the inventory levels of all agents being set to
         """
         self.Q = inv
@@ -236,3 +205,25 @@ class ExperienceReplay:
     
     def reset(self):
         self.buffer = []
+
+
+
+
+if __name__=='__main__':
+
+    sim_dict = {'perm_price_impact':.3,
+                'trans_impact_scale':0.15,
+                'trans_impact_decay':0.25*np.log(2),
+                'transaction_cost':.5,
+                'liquidation_cost':.5,
+                'running_penalty':0,
+                'T':8,
+                'dt':1.0/60.0,
+                'N_agents': 25,
+                'drift_function':(lambda x,y: 0.1*(10-y)) , #x -> time, y-> price
+                'volatility':1,
+                'initial_price_var':20}
+
+    test_sim = MarketSimulator(sim_dict)
+    test_sim.step(5*np.random.randn(25))
+    print(test_sim)
