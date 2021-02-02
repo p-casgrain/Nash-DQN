@@ -2,6 +2,7 @@ import numpy as np
 from collections import namedtuple
 import random
 import torch
+from copy import deepcopy as dc
 
 """
 Transition object summarizing changes to the environment at each time step
@@ -167,7 +168,7 @@ class MarketSimulator(object):
         Returns the observable features of the current state
         :return: State object summarizing observable features of the current state
         """
-        return State(self.T-self.t, self.S, self.I, self.Q), self.last_reward, self.total_reward
+        return State(self.T-self.t, dc(self.S), dc(self.I), dc(self.Q)), self.last_reward, self.total_reward
 
     def __str__(self):
         state, last_reward, total_reward = self.get_state()

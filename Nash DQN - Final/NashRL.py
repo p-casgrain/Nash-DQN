@@ -120,8 +120,13 @@ def run_Nash_Agent(sim_dict, nash_agent=None, num_sim=15000, batch_update_size=1
             if (print_flag):
                 cur = nash_agent.predict_action([current_state])[0]
                 curNashVal = np.transpose(nash_agent.predict_value([current_state]).cpu().data.numpy())
-                print("{} , Action: {}, Nash Value: {}\n".\
-                      format( current_state, cur.mu.cpu().data.numpy(), curNashVal ) )
+                print("Current State: ")
+                print(current_state)
+                print ("Action taken: {}", format(a))
+                print("Ending State: ")
+                print(new_state)
+                print("Nash Action: {}, Nash Value: {}\n".\
+                      format(cur.mu.cpu().data.numpy(), curNashVal ) )
                 
         sum_loss[k] = total_l
         sim_obj.reset()

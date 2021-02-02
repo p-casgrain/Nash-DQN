@@ -218,23 +218,24 @@ class NashNN():
         reward_list = [tup[3] for tup in state_tuples]
         
         # Indicator of whether current state is last state or not
-        isLastState = np.repeat(np.array([s.t > self.T - 1 for s in next_state_list]).astype(int),self.num_players)
+        isLastState = np.repeat(np.array([s.t <= 0 for s in next_state_list]).astype(int),self.num_players)
         
         target = self.predict_value(cur_state_list).view(-1)
         expanded_states, _ = self.expand_list(cur_state_list)
         expanded_next_states, _ = self.expand_list(next_state_list)
 
-        term_list = np.array(list(map(lambda p,q,tc: q*p - tc*q**2, expanded_states[:,1],expanded_states[:,2]/2,self.transaction_cost*np.ones(len(expanded_states))))) \
-                    + np.array(list(map(lambda p,q,tc: q*p - tc*q**2, expanded_next_states[:,1],expanded_states[:,2]/2,self.transaction_cost*np.ones(len(expanded_states)))))
+        term_list = np.array(list(map(lambda p,q,tc: q*p - tc*q**2, expanded_next_states[:,1],expanded_next_states[:,2]/2,self.terminal_cost*np.ones(len(expanded_next_states))))) \
+                    + np.array(list(map(lambda p,q,tc: q*p - tc*q**2, expanded_next_states[:,1],expanded_next_states[:,2]/2,self.terminal_cost*np.ones(len(expanded_next_states)))))
+        
         nextstate_val = self.predict_value(next_state_list).detach().view(-1).data.cpu().numpy()
         
         # Returns the squared loss with target being:
         # Sum of current state's reward + estimated next state's nash value     --- if not last state
-        # Reward obtained if agent executes action to net out current inventory --- if last state
+        # Sum of current state's reward + terminal costs of netting out position  --- if last state
         if torch.cuda.is_available():
-            return self.criterion(target, torch.tensor(np.multiply(isLastState,term_list) + np.multiply(np.ones(len(expanded_states)) - isLastState, nextstate_val + np.array(reward_list).flatten())).float().cuda())
+            return self.criterion(target, torch.tensor(np.multiply(isLastState,term_list) + np.multiply(np.ones(len(expanded_states)) - isLastState, nextstate_val) + np.array(reward_list).flatten()).float().cuda())
         else:
-            return self.criterion(target, torch.tensor(np.multiply(isLastState, term_list) + np.multiply(np.ones(len(expanded_states)) - isLastState, nextstate_val + np.array(reward_list).flatten())).float())
+            return self.criterion(target, torch.tensor(np.multiply(isLastState, term_list) + np.multiply(np.ones(len(expanded_states)) - isLastState, nextstate_val) + np.array(reward_list).flatten()).float())
     
     def compute_action_Loss(self, state_tuples):
         """
@@ -253,7 +254,7 @@ class NashNN():
         reward_list = torch.tensor([tup[3] for tup in state_tuples]).float()
         
         # Indicator of whether current state is last state or not
-        isLastState = np.repeat(np.array([s.t > self.T - 1 for s in next_state_list]).astype(int),self.num_players)
+        isLastState = np.repeat(np.array([s.t <= 0 for s in next_state_list]).astype(int),self.num_players)
         
         curAct = self.predict_action(cur_state_list)                             # Nash Action Coefficient Estimates of current state
         curVal = self.predict_value(cur_state_list).detach().view(-1).cpu()                    # Nash Value of Current state
