@@ -9,7 +9,8 @@ from NashAgent_lib import *
 
 # Define truncation function
 
-def run_Nash_Agent(sim_dict,num_sim = 15000, batch_update_size = 100, buffersize = 5000, AN_file_name = "Action_Net", VN_file_name = "Value_Net"):
+
+def run_Nash_Agent(sim_dict, nash_agent=None, num_sim=15000, batch_update_size=100, buffersize=5000, AN_file_name="Action_Net", VN_file_name="Value_Net"):
     """
     Runs the nash RL algothrim and outputs two files that hold the network parameters
     for the estimated action network and value network
@@ -21,9 +22,6 @@ def run_Nash_Agent(sim_dict,num_sim = 15000, batch_update_size = 100, buffersize
     #number of parameters that need to be estimated by the network
     max_a = 100         # Size of Largest Action that can be taken
     
-    # Set number of output variables needed from net:
-    # (c1 + c2 + c3 + mu)
-    parameter_number = 4
     
     # Package Simulation Parameters
     sim_obj = MarketSimulator(sim_dict)
@@ -34,19 +32,23 @@ def run_Nash_Agent(sim_dict,num_sim = 15000, batch_update_size = 100, buffersize
     #Estimated Liquidation cost (of selling/buying shares past last timestep)
     term_cost = sim_dict['liquidation_cost']
     
-    # Initialize NashNN Agents
+    # Load Game Parameters
     st0, _, _ = sim_obj.get_state()
     n_agents = sim_obj.N
     max_T = sim_obj.T
+    
+    if nash_agent is None:
+        # Set number of output variables needed from net:
+        # (c1 + c2 + c3 + mu)
+        parameter_number = 4
 
-    # all state variables but other agent's inventories
-    net_non_inv_dim = st0.to_numpy().shape[0] - (n_agents - 1)
+        # all state variables but other agent's inventories
+        net_non_inv_dim = st0.to_numpy().shape[0] - (n_agents - 1)
 
-    nash_agent = NashNN(non_invar_dim=net_non_inv_dim, n_players=n_agents,
-                        output_dim=parameter_number, max_steps=max_T,
-                        trans_cost=est_tr_cost, terminal_cost=term_cost, 
-                        num_moms=5)
-
+        nash_agent = NashNN(non_invar_dim=net_non_inv_dim, n_players=n_agents,
+                            output_dim=parameter_number, max_steps=max_T,
+                            trans_cost=est_tr_cost, terminal_cost=term_cost, 
+                            num_moms=5)
         
     #exploration chance
     ep = 0.5         #Initial chance
@@ -130,10 +132,13 @@ def run_Nash_Agent(sim_dict,num_sim = 15000, batch_update_size = 100, buffersize
     torch.save(nash_agent.action_net.state_dict(),AN_file_name)
     torch.save(nash_agent.value_net.state_dict(),VN_file_name)
     print("Simulations Complete")
+
+    return nash_agent, sum_loss
     
 
 
 if __name__=='__main__':
+    import matplotlib.pyplot as plt
 
     # Set global digit printing options
     np.set_printoptions(precision=4)
@@ -141,7 +146,6 @@ if __name__=='__main__':
     # Define Training and Model Parameters
     num_players = 5           # Total number of agents
     T = 15                    # Total number of time steps
-
 
     num_players = 2
     T = 5
@@ -159,27 +163,29 @@ if __name__=='__main__':
                 'volatility': 1,
                 'initial_price_var': 20}
 
-    # run_Nash_Agent(sim_dict,num_sim=15000, AN_file_name="Action_Net")
-    run_Nash_Agent(sim_dict, num_sim=1500, AN_file_name="Action_Net")
-
 
     sim_obj = MarketSimulator(sim_dict)
     net_non_inv_dim = len(sim_obj.get_state()[0].to_numpy())
     net_non_inv_dim -= sim_obj.N-1
     out_dim = 4
+
     nash_agent = NashNN(non_invar_dim=net_non_inv_dim,n_players=sim_obj.N,
                         output_dim=4, max_steps=T, trans_cost=0.5, 
                         terminal_cost=0.5, num_moms=5)
 
-    current_state = sim_obj.get_state()[0]
-    expanded_states, inv_states = nash_agent.expand_list(
-        [current_state], as_tensor=True)
+    # current_state = sim_obj.get_state()[0]
+    # expanded_states, inv_states = nash_agent.expand_list(
+    #     [current_state], as_tensor=True)
     
-    invar_split = torch.split(inv_states, 1, dim=1)
+    # invar_split = torch.split(inv_states, 1, dim=1)
 
-    nash_agent.action_net.moment_encoder_net(invar_split[0])
+    # nash_agent.action_net.moment_encoder_net(invar_split[0])
 
-    nash_agent.action_net.forward(
-        invar_input=inv_states,
-        non_invar_input=expanded_states)
+    # nash_agent.action_net.forward(
+    #     invar_input=inv_states,
+    #     non_invar_input=expanded_states)
+
+    # run_Nash_Agent(sim_dict,num_sim=15000, AN_file_name="Action_Net")
+    
+    nash_agent, loss_data = run_Nash_Agent(sim_dict, nash_agent=nash_agent, num_sim=1500, AN_file_name="Action_Net")
     
