@@ -168,9 +168,9 @@ if __name__=='__main__':
     net_non_inv_dim -= sim_obj.N-1
     out_dim = 4
 
-    # nash_agent = NashNN(non_invar_dim=net_non_inv_dim,n_players=sim_obj.N,
-    #                     output_dim=4, max_steps=T, trans_cost=0.5, 
-    #                     terminal_cost=0.5, num_moms=5)
+    nash_agent = NashNN(non_invar_dim=net_non_inv_dim,n_players=sim_obj.N,
+                        output_dim=4, max_steps=T, trans_cost=0.5, 
+                        terminal_cost=0.5, num_moms=5)
 
     # current_state = sim_obj.get_state()[0]
     # expanded_states, inv_states = nash_agent.expand_list(
