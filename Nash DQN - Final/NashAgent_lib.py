@@ -248,11 +248,18 @@ class NashNN():
         # to ensure consistency among agents 
         penalty = 25
         
-        cur_state_list = [tup[0] for tup in state_tuples]
-        action_list = torch.stack([tup[1] for tup in state_tuples])
-        next_state_list = [tup[2] for tup in state_tuples]
-        reward_list = torch.tensor(
-            [tup[3] for tup in state_tuples], dtype=torch.float32)
+        if torch.cuda.is_available():
+            cur_state_list = [tup[0] for tup in state_tuples]
+            action_list = torch.stack([tup[1] for tup in state_tuples])
+            next_state_list = [tup[2] for tup in state_tuples]
+            reward_list = torch.tensor(
+                [tup[3] for tup in state_tuples], dtype=torch.float32)
+        else:
+            cur_state_list = [tup[0].cuda() for tup in state_tuples]
+            action_list = torch.stack([tup[1].cuda() for tup in state_tuples])
+            next_state_list = [tup[2].cuda() for tup in state_tuples]
+            reward_list = torch.tensor(
+                [tup[3].cuda() for tup in state_tuples], dtype=torch.float32)
         
         # Indicator of whether current state is last state or not
         isLastState = np.repeat(np.array([s.t <= 0 for s in next_state_list]).astype(int),self.num_players)

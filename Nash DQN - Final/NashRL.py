@@ -89,7 +89,7 @@ def run_Nash_Agent(sim_dict, nash_agent=None, num_sim=15000, batch_update_size=1
             a = torch.clamp(torch.tensor(a).detach(), -max_a, max_a)
             
             # Take Chosen Actions and Take Step
-            sim_obj.step(a.numpy())
+            sim_obj.step(a.cpu().numpy())
             new_state,lr,tr = sim_obj.get_state()
             experience = (current_state,a,new_state,lr)
             replay.add(experience)
