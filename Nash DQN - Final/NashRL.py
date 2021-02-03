@@ -8,8 +8,6 @@ from NashAgent_lib import *
 # -------------------------------------------------------------------
 
 # Define truncation function
-
-
 def run_Nash_Agent(sim_dict, nash_agent=None, num_sim=15000, batch_update_size=100, buffersize=5000, AN_file_name="Action_Net", VN_file_name="Value_Net"):
     """
     Runs the nash RL algothrim and outputs two files that hold the network parameters
@@ -132,8 +130,8 @@ def run_Nash_Agent(sim_dict, nash_agent=None, num_sim=15000, batch_update_size=1
         sim_obj.reset()
 
         if print_flag:
-            print("Current Loss: {}\n\n".format(total_l))
-          
+            print("Current Loss: {}".format(total_l))
+                      
     torch.save(nash_agent.action_net.state_dict(),AN_file_name)
     torch.save(nash_agent.value_net.state_dict(),VN_file_name)
     print("Simulations Complete")
@@ -151,10 +149,6 @@ if __name__=='__main__':
     # Define Training and Model Parameters
     num_players = 5           # Total number of agents
     T = 15                    # Total number of time steps
-
-    num_players = 2
-    T = 5
-
 
     #Default simulation parameters
     sim_dict = {'perm_price_impact': .3,
@@ -174,9 +168,9 @@ if __name__=='__main__':
     net_non_inv_dim -= sim_obj.N-1
     out_dim = 4
 
-    nash_agent = NashNN(non_invar_dim=net_non_inv_dim,n_players=sim_obj.N,
-                        output_dim=4, max_steps=T, trans_cost=0.5, 
-                        terminal_cost=0.5, num_moms=5)
+    # nash_agent = NashNN(non_invar_dim=net_non_inv_dim,n_players=sim_obj.N,
+    #                     output_dim=4, max_steps=T, trans_cost=0.5, 
+    #                     terminal_cost=0.5, num_moms=5)
 
     # current_state = sim_obj.get_state()[0]
     # expanded_states, inv_states = nash_agent.expand_list(
@@ -192,5 +186,7 @@ if __name__=='__main__':
 
     # run_Nash_Agent(sim_dict,num_sim=15000, AN_file_name="Action_Net")
     
-    nash_agent, loss_data = run_Nash_Agent(sim_dict, nash_agent=nash_agent, num_sim=1500, AN_file_name="Action_Net")
+    nash_agent, loss_data = \
+        run_Nash_Agent(sim_dict, nash_agent=nash_agent, 
+        num_sim=15000, AN_file_name="Action_Net")
     

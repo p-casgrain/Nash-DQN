@@ -233,9 +233,9 @@ class NashNN():
         # Sum of current state's reward + estimated next state's nash value     --- if not last state
         # Sum of current state's reward + terminal costs of netting out position  --- if last state
         if torch.cuda.is_available():
-            return self.criterion(target, torch.tensor(np.multiply(isLastState,term_list) + np.multiply(np.ones(len(expanded_states)) - isLastState, nextstate_val) + np.array(reward_list).flatten()).float().cuda())
+            return self.criterion(target, torch.tensor(np.multiply(isLastState,term_list) + np.multiply(np.ones(len(expanded_states)) - isLastState, nextstate_val) + np.array(reward_list).flatten(),dtype=torch.float32).cuda())
         else:
-            return self.criterion(target, torch.tensor(np.multiply(isLastState, term_list) + np.multiply(np.ones(len(expanded_states)) - isLastState, nextstate_val) + np.array(reward_list).flatten()).float())
+            return self.criterion(target, torch.tensor(np.multiply(isLastState, term_list) + np.multiply(np.ones(len(expanded_states)) - isLastState, nextstate_val) + np.array(reward_list).flatten(), dtype=torch.float32))
     
     def compute_action_Loss(self, state_tuples):
         """
@@ -251,7 +251,8 @@ class NashNN():
         cur_state_list = [tup[0] for tup in state_tuples]
         action_list = torch.stack([tup[1] for tup in state_tuples])
         next_state_list = [tup[2] for tup in state_tuples]
-        reward_list = torch.tensor([tup[3] for tup in state_tuples]).float()
+        reward_list = torch.tensor(
+            [tup[3] for tup in state_tuples], dtype=torch.float32)
         
         # Indicator of whether current state is last state or not
         isLastState = np.repeat(np.array([s.t <= 0 for s in next_state_list]).astype(int),self.num_players)
@@ -271,9 +272,11 @@ class NashNN():
         mu_list = torch.stack([nfv.mu for nfv in curAct]).cpu()
         
         #Creates the Mu_neg and u_Neg Matrices
-        uNeg_list = torch.tensor(self.matrix_slice(action_list)).float().cpu()
+        uNeg_list = torch.tensor(self.matrix_slice(
+            action_list), dtype=torch.float32).cpu()
         muNeg_list = self.matrix_slice(mu_list).cpu()
-        act_list = torch.tensor(action_list.view(-1)).float().cpu()
+        act_list = torch.tensor(action_list.view(-1),
+                                dtype=torch.float32).cpu()
         mu_list = mu_list.view(-1).cpu()
 
         #Computes the Advantage Function using matrix operations
@@ -281,13 +284,13 @@ class NashNN():
                         dim = 1) - c3_list * torch.sum((uNeg_list - muNeg_list)**2,dim = 1) / 2
 
         if torch.cuda.is_available():
-            return torch.sum((torch.tensor(np.multiply(np.ones(len(curVal))-isLastState, nextVal) + np.multiply(isLastState, term_list) + reward_list.view(-1).cpu().numpy()).float()
+            return torch.sum((torch.tensor(np.multiply(np.ones(len(curVal))-isLastState, nextVal) + np.multiply(isLastState, term_list) + reward_list.view(-1).cpu().numpy(), dtype=torch.float32)
                             - curVal - A)**2 
                             + penalty*torch.var(c1_list.view(-1,self.num_players),1).view(-1,1).repeat(1,self.num_players).view(-1)
                             + penalty*torch.var(c2_list.view(-1,self.num_players),1).view(-1,1).repeat(1,self.num_players).view(-1)
                             + penalty*torch.var(c3_list.view(-1,self.num_players),1).view(-1,1).repeat(1,self.num_players).view(-1)).cuda()
         else:
-            return torch.sum((torch.tensor(np.multiply(np.ones(len(curVal))-isLastState, nextVal) + np.multiply(isLastState, term_list) + reward_list.view(-1).numpy()).float()
+            return torch.sum((torch.tensor(np.multiply(np.ones(len(curVal))-isLastState, nextVal) + np.multiply(isLastState, term_list) + reward_list.view(-1).numpy(), dtype=torch.float32)
                               - curVal - A)**2
                              + penalty*torch.var(c1_list.view(-1, self.num_players),1).view(-1, 1).repeat(1, self.num_players).view(-1)
                              + penalty*torch.var(c2_list.view(-1, self.num_players), 1).view(-1, 1).repeat(1, self.num_players).view(-1)
