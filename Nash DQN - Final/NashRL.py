@@ -59,8 +59,15 @@ def run_Nash_Agent(sim_dict, nash_agent=None, num_sim=15000, batch_update_size=1
     total_l = 0
     
     #Set feasibility exploration space of inventory levels:
-    space = np.array([-100,100])
-    
+    q_space = torch.range(start=-100,end=100,step=1)
+    dq = q_space[1]-q_space[0]
+    q_m = torch.mean(q_space)
+    explore_dist = \
+        torch.distributions.multivariate_normal.MultivariateNormal(
+            loc=torch.ones(n_agents)*q_m,
+            covariance_matrix=torch.eye(n_agents)*dq/4
+        )
+
     #---------- Main simulation Block -----------------
     for k in range (0,num_sim):
 
@@ -78,15 +85,12 @@ def run_Nash_Agent(sim_dict, nash_agent=None, num_sim=15000, batch_update_size=1
             if np.random.random() < eps:
                 #Set target level of inventory level to cover feasible exploration space
                 # then select action so it results in that inventory level
-                target_q = np.random.multivariate_normal(\
-                    np.ones(n_agents)*(space[1]+space[0])/2,\
-                    np.diag(np.ones(n_agents)*(space[1]-space[0])/4) )
-                    
-                a = target_q - current_state.q
+                target_q = explore_dist.sample()
+                a = target_q - torch.tensor(current_state.q)
             else:
                 a = nash_agent.predict_action([current_state])[0].mu
 
-            a = torch.clamp(torch.tensor(a).detach(), -max_a, max_a)
+            a = torch.clamp(a, -max_a, max_a).clone().detach()
             
             # Take Chosen Actions and Take Step
             sim_obj.step(a.cpu().numpy())
@@ -188,5 +192,6 @@ if __name__=='__main__':
     
     nash_agent, loss_data = \
         run_Nash_Agent(sim_dict, nash_agent=nash_agent, 
-        num_sim=15000, AN_file_name="Action_Net")
+        num_sim=30000, AN_file_name="Action_Net_ADA",
+                       VN_file_name="Value_Net_ADA")
     
