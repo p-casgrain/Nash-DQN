@@ -135,10 +135,20 @@ def run_Nash_Agent(sim_dict, nash_agent=None, num_sim=15000, batch_update_size=1
 
         if print_flag:
             print("Current Loss: {}".format(total_l))
-                      
-    torch.save(nash_agent.action_net.state_dict(),AN_file_name)
-    torch.save(nash_agent.value_net.state_dict(),VN_file_name)
-    print("Simulations Complete")
+
+        # Set Save Flag
+        save_flag = not (k+1) % 500
+        if save_flag:
+            print("Saving weights to disk")
+            torch.save(nash_agent.action_net.state_dict(), AN_file_name + ".pt")
+            torch.save(nash_agent.value_net.state_dict(), VN_file_name + ".pt" )
+            print("Weights saved to disk")
+
+    print("Saving final weights to disk")
+    torch.save(nash_agent.action_net.state_dict(), AN_file_name + ".pt")
+    torch.save(nash_agent.value_net.state_dict(), VN_file_name + ".pt")
+    print("Weights saved to disk")
+
 
     return nash_agent, sum_loss
     
