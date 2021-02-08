@@ -6,14 +6,14 @@ from matplotlib.ticker import MaxNLocator
 import matplotlib.gridspec as gridspec
 
 from NashRL import *
-from nashRL_netlib import *
+# from nashRL_netlib import *
 from NashAgent_lib import *
 from textwrap import wrap
 
 
 font = {'size'   : 17}
 
-def to_State_mesh(t_list, q_list, p, net, nump, other_inv):
+def to_State_mesh(t_list, q_list, p, net, nump, other_inv, i_val):
     """
     Creates a Mesh with Inventory on Y-axis, Time on X-axis at a specified price
     :param t_list:      List of time values to be evaluated at
@@ -27,7 +27,7 @@ def to_State_mesh(t_list, q_list, p, net, nump, other_inv):
     state_list = []
     for q in q_list:
         for t in t_list:
-            state_list.append(State(t,p,np.append(q,other_inv*np.ones(nump-1))))
+            state_list.append(State(t=t,p=p,i=i_val,q=np.append(q,other_inv*np.ones(nump-1))))
     
     act_list = net.predict_action(state_list)
     mu_list = torch.stack([nfv.mu for nfv in act_list])
@@ -36,7 +36,7 @@ def to_State_mesh(t_list, q_list, p, net, nump, other_inv):
 
 #Creates a series of heatmaps of Inventory x Time, with each subplot
 # representing a separate price point
-def heatmap_old(net, t_step, q_step, p_step, t_range, q_range, p_range, nump, other_agent_inv):
+def heatmap_old(net, t_step, q_step, p_step, t_range, q_range, p_range, n_agents, other_agent_inv,i_val):
     """
     Creates a heatmap panel at a fixed average other agent inventory level, across
      different price levels with price and inventory axis within each price level
@@ -47,7 +47,8 @@ def heatmap_old(net, t_step, q_step, p_step, t_range, q_range, p_range, nump, ot
     :param t_range:             Range of the time axis
     :param q_range:             Range of the inventory axis
     :param p_range:             Range of the price levels
-    :param nump:                Number of total agents
+    :param i_range:             Range of impact state levels
+    :param n_agents:                Number of total agents
     :param other_agent_inv:     Average Inventory level of all other agents
     """
     counter = 1
@@ -67,8 +68,8 @@ def heatmap_old(net, t_step, q_step, p_step, t_range, q_range, p_range, nump, ot
         # Creates mesh over each individual price subplot and plot contours
         q_list = np.linspace(q_range[0], q_range[1], q_step)
         t_list = np.linspace(t_range[0], t_range[1], t_step)
-        im = plt.contourf(t_list, q_list, to_State_mesh(t_list,q_list,p,net,nump,default_inventory), 20, cmap='RdBu', vmin = -20, vmax = 20, levels = levels)
-        im2 = plt.contour(t_list, q_list, to_State_mesh(t_list,q_list,p,net,nump,default_inventory), levels = [0])
+        im = plt.contourf(t_list, q_list, to_State_mesh(t_list,q_list,p,net,n_agents,default_inventory,i_val), 20, cmap='RdBu', vmin = -20, vmax = 20, levels = levels)
+        im2 = plt.contour(t_list, q_list, to_State_mesh(t_list,q_list,p,net,n_agents,default_inventory,i_val), levels = [0])
         im2.collections[0].set_linewidth(2)
         im2.collections[0].set_color('black')
         im2.collections[0].set_linestyle('dashed')
