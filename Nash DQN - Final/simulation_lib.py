@@ -27,7 +27,7 @@ class State(ProtoState):
         return torch.tensor(self.to_numpy(), **kwargs)
     def to_sep_numpy(self, idx):
         # i is agent index (start from 0) to include is invariant
-        return np.concatenate([self.t, self.p, self.q[idx], self.i],axis = None), np.concatenate([self.q[:idx], self.q[idx+1:]], axis = None) 
+        return np.array( (self.t, self.p, self.q[idx], self.i) ), np.concatenate( (self.q[:idx], self.q[idx+1:]) , axis = None) 
     def to_sep_tensor(self, idx, **kwargs):
         non_inv, inv = self.to_sep_numpy(idx)
         return torch.tensor(non_inv, **kwargs), torch.tensor(inv, **kwargs)
@@ -113,7 +113,7 @@ class MarketSimulator(object):
         """
         Reset the simulation and reinitialize inventory and price levels
         """
-        self.Q = np.random.normal(0, 10, self.N)
+        self.Q = np.random.normal(0, 50, self.N)
         self.S = np.float32(10 + np.random.normal(0, self.sigma))
         self.I = np.random.normal(0, 0.25*self.sigma)
         self.t = np.float32(0)
@@ -158,7 +158,7 @@ class MarketSimulator(object):
 
         cur_state, _, _ = self.get_state()
 
-        return Transition(last_state, nu, cur_state, self.last_reward)
+        return dc( Transition(last_state, nu, cur_state, self.last_reward) )
     
     def impact_scale(self,v):
         return np.sign(v)*np.sqrt(np.abs(v))
@@ -168,7 +168,7 @@ class MarketSimulator(object):
         Returns the observable features of the current state
         :return: State object summarizing observable features of the current state
         """
-        return State( dc(self.T-self.t), dc(self.S), dc(self.I), dc(self.Q)), self.last_reward, self.total_reward
+        return dc(State( self.T-self.t, self.S, self.I, self.Q)), dc(self.last_reward), dc(self.total_reward)
 
     def __str__(self):
         state, last_reward, total_reward = self.get_state()
