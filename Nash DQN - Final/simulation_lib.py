@@ -76,7 +76,7 @@ class MarketSimulator(object):
         self.sigma0 = param_dict['initial_price_var']
 
         # Define Reward Function
-        self.r = lambda Q, S, nu: - nu * (S + self.t_cost * nu) - self.phi * Q ** 2
+        self.r = lambda Q, S, nu: - nu * (S + self.t_cost * nu) - self.phi * ( Q ** 2 )
 
         # Allocating Memory for Game Variables
         self.Q = np.random.normal(0, self.sigma0, self.N)
@@ -168,7 +168,7 @@ class MarketSimulator(object):
         Returns the observable features of the current state
         :return: State object summarizing observable features of the current state
         """
-        return State(self.T-self.t, dc(self.S), dc(self.I), dc(self.Q)), self.last_reward, self.total_reward
+        return State( dc(self.T-self.t), dc(self.S), dc(self.I), dc(self.Q)), self.last_reward, self.total_reward
 
     def __str__(self):
         state, last_reward, total_reward = self.get_state()

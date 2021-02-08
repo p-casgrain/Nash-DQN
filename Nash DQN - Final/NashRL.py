@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+from datetime import date
 
 from simulation_lib import *
 from NashAgent_lib import *
@@ -199,9 +200,15 @@ if __name__=='__main__':
     #     non_invar_input=expanded_states)
 
     # run_Nash_Agent(sim_dict,num_sim=15000, AN_file_name="Action_Net")
+
+    #Load saved network parameters from file
+    # net_file_name = "Action_Net"
+    net_file_name = "./ADA_Trained_Files/Action_Net_ADA.pt"
+    nash_agent.action_net.load_state_dict(torch.load(net_file_name))
     
+    str_dt = date.today().strftime("%d%m%Y")
     nash_agent, loss_data = \
         run_Nash_Agent(sim_dict, nash_agent=nash_agent, 
-        num_sim=30000, AN_file_name="Action_Net_ADA",
-                       VN_file_name="Value_Net_ADA")
+                       num_sim=15000, AN_file_name="Action_Net"+str_dt,
+                       VN_file_name="Value_Net"+str_dt)
     
