@@ -7,6 +7,7 @@ from NashAgent_lib import *
 
 import os
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
+os.environ['CUDA_VISIBLE_DEVICES'] = ''
 
 # -------------------------------------------------------------------
 # This file executes the Nash-DQN Reinforcement Learning Algorithm
