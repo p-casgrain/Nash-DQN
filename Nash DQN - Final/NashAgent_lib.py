@@ -124,10 +124,10 @@ class NashNN():
 
         # Define optimizer used (SGD, etc)
         self.optimizer_DQN = optim.RMSprop(
-            self.action_net.parameters(), lr=0.005*1.5)
+            self.action_net.parameters(), lr=0.005)
 
         self.optimizer_value = optim.RMSprop(
-            self.value_net.parameters(), lr=0.01*1.5)
+            self.value_net.parameters(), lr=0.01)
 
         # Define loss function (Mean-squared, etc)
         self.criterion = nn.MSELoss()
@@ -243,8 +243,6 @@ class NashNN():
         expanded_next_states, _ = self.expand_list(next_state_list)
 
         def obj_map(p, q, tc): return q*p - tc*(q**2)
-        # term_list = np.array(list(map(obj_map, expanded_next_states[:, 1], expanded_next_states[:, 2]/2, self.terminal_cost*np.ones(len(expanded_next_states))))) \
-        #     + np.array(list(map(obj_map, expanded_next_states[:, 1], expanded_next_states[:,2]/2, self.terminal_cost*np.ones(len(expanded_next_states)))))
         term_list = obj_map(expanded_next_states[:, 1], expanded_next_states[:, 2]/2,
                             self.terminal_cost*torch.ones(len(expanded_next_states)))
 

@@ -172,7 +172,7 @@ if __name__ == '__main__':
 
     # Define Training and Model Parameters
     num_players = 5           # Total number of agents
-    T = 15                    # Total number of time steps
+    T = 8                    # Total number of time steps
 
     # Default simulation parameters
     sim_dict = {'perm_price_impact': .3,
@@ -220,5 +220,6 @@ if __name__ == '__main__':
 
     str_dt = date.today().strftime("%d%m%Y")
     nash_agent, loss_data = \
-        run_Nash_Agent(sim_dict, nash_agent=nash_agent, num_sim=15000,
-                       AN_file_name="Action_Net_ADA"+str_dt, VN_file_name="Value_Net_ADA"+str_dt)
+        run_Nash_Agent(sim_dict, nash_agent=nash_agent, num_sim=2000,
+                       AN_file_name="./pt_files/Action_Net_ADA"+str_dt, 
+                       VN_file_name="./pt_files/Value_Net_ADA"+str_dt )
