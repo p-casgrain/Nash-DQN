@@ -78,23 +78,29 @@ class MarketSimulator(object):
         # Define Reward Function
         self.r = lambda Q, S, nu: - nu * (S + self.t_cost * nu) - self.phi * ( Q ** 2 )
 
-        # Allocating Memory for Game Variables
-        self.Q = np.random.normal(0, self.sigma0, self.N)
-        self.S = np.float32(10 + np.random.normal(0, self.sigma))
-        self.I = np.random.normal(0, 0.25*self.sigma)
+        # Allocating Memory for Game Variables & Resetting
         self.dS = np.float32(0)
         self.dF = np.float32(0)
         self.dI = np.float32(0)
+
+        self.reset()
+        
+    def reset(self):
+        """
+        Reset the simulation and reinitialize inventory and price levels
+        """
+        self.Q = np.random.normal(0, 25, self.N)
+        self.S = np.float32(10 + np.random.normal(0, self.sigma))
+        self.I = np.random.normal(0, 0.25*self.sigma)
         self.t = np.float32(0)
 
-        # Variable Containing Total Accumulated Score
         self.last_reward = np.zeros(self.N, dtype=np.float32)
         self.total_reward = np.zeros(self.N, dtype=np.float32)
 
-        # Variable Containing BM increments
         self.dW = np.random.normal(0, np.sqrt(self.dt),
                                    int(round(np.ceil(self.T / self.dt) + 2)))
         
+        self.check_price()
     def check_price(self):
         """
         Ensure price process does not fall below 0
@@ -109,22 +115,6 @@ class MarketSimulator(object):
         """
         self.Q = inv
 
-    def reset(self):
-        """
-        Reset the simulation and reinitialize inventory and price levels
-        """
-        self.Q = np.random.normal(0, 50, self.N)
-        self.S = np.float32(10 + np.random.normal(0, self.sigma))
-        self.I = np.random.normal(0, 0.25*self.sigma)
-        self.t = np.float32(0)
-
-        self.last_reward = np.zeros(self.N, dtype=np.float32)
-        self.total_reward = np.zeros(self.N, dtype=np.float32)
-
-        self.dW = np.random.normal(0, np.sqrt(self.dt),
-                                   int(round(np.ceil(self.T / self.dt) + 2)))
-        
-        self.check_price()
 
     def step(self, nu):
         """

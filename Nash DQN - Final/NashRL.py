@@ -67,12 +67,12 @@ def run_Nash_Agent(sim_dict, nash_agent=None, num_sim=15000, batch_update_size=1
 
     # Set feasibility exploration space of inventory levels:
     q_space = torch.range(start=-100, end=100, step=1)
-    dq = q_space[1]-q_space[0]
+    q_span = torch.max(q_space) - torch.min(q_space)
     q_m = torch.mean(q_space)
     explore_dist = \
         torch.distributions.multivariate_normal.MultivariateNormal(
             loc=torch.ones(n_agents)*q_m,
-            covariance_matrix=torch.eye(n_agents)*dq/4
+            covariance_matrix=torch.eye(n_agents)*q_span/5
         )
 
     # ---------- Main simulation Block -----------------
