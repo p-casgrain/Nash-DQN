@@ -89,7 +89,7 @@ class MarketSimulator(object):
         """
         Reset the simulation and reinitialize inventory and price levels
         """
-        self.Q = np.random.normal(0, 25, self.N)
+        self.Q = np.random.normal(0, 10, self.N)
         self.S = np.float32(10 + np.random.normal(0, self.sigma))
         self.I = np.random.normal(0, 0.25*self.sigma)
         self.t = np.float32(0)

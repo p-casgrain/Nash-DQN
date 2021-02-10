@@ -221,6 +221,6 @@ if __name__ == '__main__':
 
     str_dt = date.today().strftime("%d%m%Y")
     nash_agent, loss_data = \
-        run_Nash_Agent(sim_dict, nash_agent=nash_agent, num_sim=2000,
+        run_Nash_Agent(sim_dict, nash_agent=nash_agent, num_sim=15000,
                        AN_file_name="./pt_files/Action_Net_ADA"+str_dt, 
                        VN_file_name="./pt_files/Value_Net_ADA"+str_dt )
