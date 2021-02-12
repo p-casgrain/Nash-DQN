@@ -127,7 +127,7 @@ class NashNN():
             self.action_net.parameters(), lr=0.005)
 
         self.optimizer_value = optim.RMSprop(
-            self.value_net.parameters(), lr=0.01)
+            self.value_net.parameters(), lr=0.005)
 
         # Define loss function (Mean-squared, etc)
         self.criterion = nn.MSELoss()
