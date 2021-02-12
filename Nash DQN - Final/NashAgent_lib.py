@@ -67,11 +67,11 @@ class PermInvariantQNN(torch.nn.Module):
         )
 
         self.decoder_net = nn.Sequential(
-            nn.Linear(self.num_moments + self.non_invar_dim, 10),
+            nn.Linear(self.num_moments + self.non_invar_dim, 25),
             nn.ReLU(),
-            nn.Linear(10, 10),
+            nn.Linear(25, 25),
             nn.ReLU(),
-            nn.Linear(10, self.out_dim)
+            nn.Linear(25, self.out_dim)
         )
 
     def forward(self, invar_input, non_invar_input, inv_split_dim=1):
