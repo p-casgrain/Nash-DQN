@@ -138,10 +138,10 @@ class MarketSimulator(object):
             self.total_reward += self.last_reward
 
             # Advance Asset Price
-            self.dF = self.mu(self.t, self.S) * self.dt + self.sigma * self.dW[int(round(self.t))]
+            self.dF = self.mu(self.t, self.S) * self.dt + self.sigma * self.dW[int(round(self.t/self.dt))]
             #self.dS = self.dF + self.dt * (self.perm_imp * np.sign(np.mean(nu))*np.sqrt(np.abs(np.mean(nu))))
             self.dI = self.I * (np.exp(-self.tmp_decay*self.dt) - 1) + \
-                self.dt * self.tmp_scale * self.impact_scale(np.mean(nu))
+                self.dt * self.tmp_scale * self.impact_scale(np.sum(nu))
             self.I += self.dI
             self.dS = self.dF + self.dI + self.dt * (self.perm_imp * np.mean(nu))
             self.S += self.dS
