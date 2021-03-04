@@ -185,7 +185,7 @@ if __name__ == '__main__':
                 'N_agents': num_players,
                 'drift_function': (lambda x, y: 0.1*(10-y)),
                 'volatility': 1,
-                'initial_price_var': 20}
+                'initial_price_var': 20 }
 
     sim_obj = MarketSimulator(sim_dict)
     net_non_inv_dim = len(sim_obj.get_state()[0].to_numpy())

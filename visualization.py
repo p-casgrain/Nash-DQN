@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 import matplotlib
 from matplotlib.ticker import MaxNLocator
 import matplotlib.gridspec as gridspec
+from copy import deepcopy as dc
+
 
 from NashRL import *
 # from nashRL_netlib import *
