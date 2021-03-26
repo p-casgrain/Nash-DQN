@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import matplotlib
 from matplotlib.ticker import MaxNLocator
 import matplotlib.gridspec as gridspec
-from copy import deepcopy as dc
+import copy
 
 
 from NashRL import *
@@ -38,7 +38,7 @@ def to_State_mesh(t_list, q_list, p, net, nump, other_inv, i_val):
 
 #Creates a series of heatmaps of Inventory x Time, with each subplot
 # representing a separate price point
-def heatmap_old(net, t_step, q_step, p_step, t_range, q_range, p_range, n_agents, other_agent_inv,i_val):
+def draw_heatmap(net, t_step, q_step, p_step, t_range, q_range, p_range, n_agents, other_agent_inv,i_val):
     """
     Creates a heatmap panel at a fixed average other agent inventory level, across
      different price levels with price and inventory axis within each price level
@@ -150,6 +150,7 @@ def fixed_sample_paths(net,num_plots,nump,T,sim_dict,random_seed):
             sim.setInv(copy.deepcopy(q0))
             current_state,lr,tr = sim.get_state()
             inv_list = []
+            imp_list = []
             p_list = []
             q_list = []
             plt.subplot(int(np.ceil(num_plots/3)), 3, int(i*3+j)+1)
@@ -158,20 +159,25 @@ def fixed_sample_paths(net,num_plots,nump,T,sim_dict,random_seed):
                 #if t == 0:
                 #    q_list.append(current_state.q)
                 inv_list.append(current_state.q)
+                imp_list.append(current_state.i)
                 p_list.append(current_state.p)
                 a = net.predict_action([current_state])[0].mu.cpu().data.numpy()
                 sim.step(a)
                 new_state,lr,tr = sim.get_state()
+                
             inv_list = np.array(inv_list)
+            imp_list = np.array(imp_list)
             p_list = np.array(p_list)
+
             ax = plt.gca()
             ax.grid(False)
             ax2 = ax.twinx()
             ax2.grid(False)
-            ax.plot(inv_list)
+            ax.plot(inv_list,linewidth=1)
             ax.set_ylim((-20, 20))
-            ax2.set_ylim((7, 13))
-            ax2.plot(p_list, 'k--')
+            ax2.set_ylim((3, 20))
+            ax2.plot(p_list, 'k--',linewidth=1.5)
+            ax2.plot(imp_list, ':', color='black', linewidth=1.5)
             ax.tick_params(axis='both', which='major', labelsize=5)
             ax2.tick_params(axis='both', which='major', labelsize=5)
             ax2.yaxis.set_major_locator(MaxNLocator(integer=True, nbins = 10))
@@ -206,9 +212,9 @@ if __name__ == '__main__':
     nash_agent.action_net.eval()
     
     # Creates three optimal action heat maps at different levels of other agent's inventory (-20, 0, 20)
-    heatmap_old(nash_agent,15,50,5,[0,14],[-25,25],[6,14],nump = num_players, other_agent_inv = -40)
-    heatmap_old(nash_agent,15,50,5,[0,14],[-25,25],[6,14],nump = num_players, other_agent_inv = 0)
-    heatmap_old(nash_agent,15,50,5,[0,14],[-25,25],[6,14],nump = num_players, other_agent_inv = 40)
+    draw_heatmap(nash_agent,15,50,5,[0,14],[-25,25],[6,14],nump = num_players, other_agent_inv = -40)
+    draw_heatmap(nash_agent,15,50,5,[0,14],[-25,25],[6,14],nump = num_players, other_agent_inv = 0)
+    draw_heatmap(nash_agent,15,50,5,[0,14],[-25,25],[6,14],nump = num_players, other_agent_inv = 40)
 
     # Creates plot with subplots of sample trajectories
     sample_paths(nash_agent,9,num_players,15, sim_dict)

@@ -173,19 +173,22 @@ if __name__ == '__main__':
 
     # Define Training and Model Parameters
     num_players = 5           # Total number of agents
-    T = 8                    # Total number of time steps
 
     # Default simulation parameters
-    sim_dict = {'perm_price_impact': .3,
-                'transaction_cost': .5,
-                'liquidation_cost': .5,
-                'running_penalty': 0,
-                'T': T,
-                'dt': 1,
-                'N_agents': num_players,
-                'drift_function': (lambda x, y: 0.1*(10-y)),
-                'volatility': 1,
-                'initial_price_var': 20 }
+    sim_dict = {
+            'perm_price_impact': .3,
+            'transaction_cost': .5,
+            'liquidation_cost': .5*0,
+            'running_penalty': 0,
+            'trans_impact_scale':0.15,
+            'trans_impact_decay':0.25*np.log(2),
+            'T': 8,
+            'dt': 10./60.,
+            'N_agents': num_players,
+            'drift_function': (lambda x, y: 2*(10-y)),
+            'volatility': 1.,
+            'initial_price_var': 1.,
+            'initial_inv_var': 7.5}
 
     sim_obj = MarketSimulator(sim_dict)
     net_non_inv_dim = len(sim_obj.get_state()[0].to_numpy())
@@ -193,8 +196,9 @@ if __name__ == '__main__':
     out_dim = 4
 
     nash_agent = NashNN(non_invar_dim=net_non_inv_dim, n_players=sim_obj.N,
-                        output_dim=4, max_steps=T, trans_cost=0.5,
+                        output_dim=4, max_steps=np.ceil(sim_dict['T']/sim_dict['dt']),
                         terminal_cost=0.5, num_moms=5)
+
 
     # current_state = sim_obj.get_state()[0]
     # expanded_states, inv_states = nash_agent.expand_list(
@@ -221,6 +225,6 @@ if __name__ == '__main__':
 
     str_dt = date.today().strftime("%d%m%Y")
     nash_agent, loss_data = \
-        run_Nash_Agent(sim_dict, nash_agent=nash_agent, num_sim=15000,
+        run_Nash_Agent(sim_dict, nash_agent=nash_agent, num_sim=5000,
                        AN_file_name="./pt_files/Action_Net_ADA"+str_dt, 
                        VN_file_name="./pt_files/Value_Net_ADA"+str_dt )

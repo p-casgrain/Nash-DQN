@@ -102,11 +102,10 @@ class NashNN():
     :param term_cost:    Terminal costs (estimated or otherwise)
     """
 
-    def __init__(self, non_invar_dim, output_dim, n_players, max_steps, trans_cost, terminal_cost, num_moms=5):
+    def __init__(self, non_invar_dim, output_dim, n_players, max_steps, terminal_cost, num_moms=5):
         # Simulation Parameters
         self.num_players = n_players
         self.T = max_steps
-        self.transaction_cost = trans_cost
         self.terminal_cost = terminal_cost
         self.non_invar_dim = non_invar_dim
 
@@ -124,10 +123,10 @@ class NashNN():
 
         # Define optimizer used (SGD, etc)
         self.optimizer_DQN = optim.RMSprop(
-            self.action_net.parameters(), lr=0.005)
+            self.action_net.parameters(), lr=0.001)
 
         self.optimizer_value = optim.RMSprop(
-            self.value_net.parameters(), lr=0.005)
+            self.value_net.parameters(), lr=0.001)
 
         # Define loss function (Mean-squared, etc)
         self.criterion = nn.MSELoss()
@@ -322,19 +321,10 @@ class NashNN():
         A = - c1_list * (act_list-mu_list)**2 / 2 - c2_list * (act_list-mu_list) * torch.sum(uNeg_list - muNeg_list,
                                                                                              dim=1) - c3_list * torch.sum((uNeg_list - muNeg_list)**2, dim=1) / 2
 
-        if torch.cuda.is_available():
-            return torch.sum((torch.tensor(np.multiply(np.ones(len(curVal))-isLastState, nextVal) + np.multiply(isLastState, term_list) + reward_list.view(-1).cpu().numpy(), dtype=torch.float32)
-                              - curVal - A)**2
-                             + penalty*torch.var(c1_list.view(-1, self.num_players),
-                                                 1).view(-1, 1).repeat(1, self.num_players).view(-1)
-                             + penalty*torch.var(c2_list.view(-1, self.num_players),
-                                                 1).view(-1, 1).repeat(1, self.num_players).view(-1)
-                             + penalty*torch.var(c3_list.view(-1, self.num_players), 1).view(-1, 1).repeat(1, self.num_players).view(-1)).cuda()
-        else:
-            return torch.sum((torch.tensor(np.multiply(np.ones(len(curVal))-isLastState, nextVal) + np.multiply(isLastState, term_list) + reward_list.view(-1).numpy(), dtype=torch.float32)
-                              - curVal - A)**2
-                             + penalty*torch.var(c1_list.view(-1, self.num_players),
-                                                 1).view(-1, 1).repeat(1, self.num_players).view(-1)
-                             + penalty*torch.var(c2_list.view(-1, self.num_players),
-                                                 1).view(-1, 1).repeat(1, self.num_players).view(-1)
-                             + penalty*torch.var(c3_list.view(-1, self.num_players), 1).view(-1, 1).repeat(1, self.num_players).view(-1))
+        return torch.sum((torch.tensor(np.multiply(np.ones(len(curVal))-isLastState, nextVal) + np.multiply(isLastState, term_list) + reward_list.view(-1).numpy(), dtype=torch.float32)
+                            - curVal - A)**2
+                            + penalty*torch.var(c1_list.view(-1, self.num_players),
+                                                1).view(-1, 1).repeat(1, self.num_players).view(-1)
+                            + penalty*torch.var(c2_list.view(-1, self.num_players),
+                                                1).view(-1, 1).repeat(1, self.num_players).view(-1)
+                            + penalty*torch.var(c3_list.view(-1, self.num_players), 1).view(-1, 1).repeat(1, self.num_players).view(-1))
