@@ -87,7 +87,7 @@ class MarketSimulator(object):
 
         # Define Reward Function: Transaction cost + Running cost + Trade profit + Terminal Penalty
         self.r = lambda t, Q, S, dS, nu: \
-            - nu * (S + self.t_cost * nu) \
+            - nu * (S + self.t_cost * nu) * self.dt \
                 - self.phi * (Q ** 2) * self.dt \
                 + (Q + nu * self.dt) * dS \
                 - (self.t >= self.T) * (self.L_cost * Q**2) 
