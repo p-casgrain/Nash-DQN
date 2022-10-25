@@ -3,8 +3,9 @@ The associated paper "Deep Q-Learning for Nash Equilibria: Nash-DQN" can be foun
 
 INSTRUCTIONS:
 
-"Nash DQN-Old" pertains to files associated with a prior verion of the paper.
-"Nash DQN-Updated" pertains to files associated with the current latest version on arxiv.
+Folder structure:
+- "Nash DQN-Old" pertains to files associated with a prior verion of the paper. 
+- "Nash DQN-Updated" pertains to files associated with the current latest version on arxiv.
 
 To generate plots based on pre-trained network:
 - Open file "Visualizations.ipynb" and run all cells
