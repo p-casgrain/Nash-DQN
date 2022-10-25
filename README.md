@@ -3,11 +3,15 @@ The associated paper "Deep Q-Learning for Nash Equilibria: Nash-DQN" can be foun
 
 INSTRUCTIONS:
 
-To generate plots based on pre-trained network:
-- Open file "Visualization.ipynb" and run all cells
+"Nash DQN-Old" pertains to files associated with a prior verion of the paper.
+"Nash DQN-Updated" pertains to files associated with the current latest version on arxiv.
 
-To train network based on default parameters:
-- Open file "Training.ipynb" and run cell with appropiate parameters
-- Open file "Visualization.ipynb"
-- Change variable net_file_name to the designated file name of Action Network
+To generate plots based on pre-trained network:
+- Open file "Visualizations.ipynb" and run all cells
+
+To Nash DQN train network and Fictitious Play network based on default parameters:
+- Open file "NashDQN-Training.ipynb" and run cell with appropiate parameters
+- Open file "FR-DDQN-Training.ipynb" and run cell with appropiate parameters
+- Open file "Visualizations.ipynb"
+- Change save file location for both networks to the designated file name generated from the two previous notebooks
 - Run all cells to generate plots
